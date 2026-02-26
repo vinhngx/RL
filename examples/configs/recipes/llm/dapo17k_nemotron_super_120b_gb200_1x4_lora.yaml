@@ -1,0 +1,276 @@
+#############################################################
+# DAPO-style run on DAPO-Math-17k (pure NeMoRL) - COLOCATED with LoRA.
+#
+# - Entry point:
+#     uv run examples/run_grpo_math.py --config <this.yaml>
+# - Dataset:
+#     HuggingFace BytedTsinghua-SIA/DAPO-Math-17k (train)
+#     HuggingFace BytedTsinghua-SIA/AIME-2024 (validation)
+#   via built-in NeMoRL dataset_name=DAPOMath17K
+# - Cluster: 1 node × 4 GPUs/node (4 GPUs total)
+#   - Colocated: vLLM generation and Megatron training share the same node
+# - Model: override via CLI, e.g.
+#     policy.model_name=/raid/dldata/vinhn/nemotron-super-120B-A12/
+#
+# Notes:
+# - Colocated setup: vLLM and training share the same node (memory-efficient with LoRA + FP8)
+# - LoRA enables parameter-efficient fine-tuning, reducing memory requirements
+# - FP8 quantization (training + inference) further reduces memory usage significantly
+# - vLLM uses lower GPU memory utilization (0.5-0.6) to share with Megatron training
+# - DAPO features are GRPO knobs: dynamic sampling + reward shaping (+ optional scaling).
+# - Async GRPO is intentionally NOT used (DAPO features are incompatible with async mode).
+#############################################################
+
+defaults: ../../grpo_math_1B.yaml
+
+grpo:
+  max_num_epochs: 1
+  max_num_steps: 2000
+
+  # Rollout shape
+  num_prompts_per_step: 32
+  num_generations_per_prompt: 8
+  max_rollout_turns: 1
+
+  # GRPO/DAPO basics
+  normalize_rewards: true
+  use_leave_one_out_baseline: true
+  seed: 42
+
+  # Validation
+  val_at_start: true
+  val_period: 25
+  # Must be non-null for `examples/run_grpo_math.py`.
+  # If the validation dataset is shorter than this, it will just run through the dataset once.
+  max_val_samples: 256
+  val_batch_size: 32
+
+  # ----- DAPO features -----
+  use_dynamic_sampling: true
+  # Dataloader batch size = batch_multiplier × num_prompts_per_step
+  batch_multiplier: 2
+  dynamic_sampling_max_gen_batches: 10
+
+  # Overlong reward shaping (penalize excessively long generations)
+  reward_shaping:
+    enabled: true
+    overlong_buffer_length: 1024
+    overlong_buffer_penalty: 1.0
+    max_response_length: ${policy.max_total_sequence_length}
+
+  # Optional linear reward scaling (keeps reward magnitude stable)
+  reward_scaling:
+    enabled: true
+    source_min: 0.0
+    source_max: 1.0
+    target_min: -1.0
+    target_max: 1.0
+
+  # Safety rails
+  overlong_filtering: false
+  seq_logprob_error_threshold: 2
+
+loss_fn:
+  # DAPO clip-higher: set max > min.
+  ratio_clip_min: 0.2
+  ratio_clip_max: 0.28
+  ratio_clip_c: null
+
+  # Generally recommended for long-CoT RL
+  token_level_loss: true
+
+  # Keep it simple for getting started
+  reference_policy_kl_penalty: 0.0
+  reference_policy_kl_type: "k3"
+  kl_input_clamp_value: 20.0
+  kl_output_clamp_value: 10.0
+
+  use_on_policy_kl_approximation: false
+  truncated_importance_sampling_ratio: null
+  use_importance_sampling_correction: true  # Recommended for FP8 to improve stability
+  force_on_policy_ratio: false
+
+checkpointing:
+  enabled: true
+  checkpoint_dir: "results/dapo_math17k_lora"
+  metric_name: "val:accuracy"
+  higher_is_better: true
+  keep_top_k: 3
+  save_period: 50
+  checkpoint_must_save_by: null
+
+policy:
+  # Override in the launcher or CLI:
+  #   policy.model_name=/raid/dldata/vinhn/nemotron-super-120B-A12/
+  model_name: "/raid/dldata/vinhn/nemotron-super-rl-021826"
+  tokenizer:
+    name: ${policy.model_name}
+    # Nemotron tokenizer may not ship a HF chat template. Set an explicit passthrough template
+    # so `tokenizer.apply_chat_template()` works during data processing/validation.
+    #chat_template: "{% for message in messages %}{{ message['content'] }}{% endfor %}"
+    #chat_template_kwargs: null
+  #hf_config_overrides: {}
+
+  # Keep batch sizes tied to rollout count (stable for GRPO)
+  train_global_batch_size: ${mul:${grpo.num_prompts_per_step}, ${grpo.num_generations_per_prompt}}
+  train_micro_batch_size: 1
+  logprob_batch_size: 1
+
+  # Long-context RL can be expensive; start smaller and scale up.
+  max_total_sequence_length: 512
+  precision: "bfloat16"  # BF16 for inference, FP8 training enabled in megatron_cfg
+  logprob_chunk_size: 256
+
+  # For 1 node (4 GPUs) with LoRA: TP=4, PP=1, CP=1 (for Megatron generation backend)
+  # Total parallelism = 4 × 1 × 1 = 4, DP = 4/4 = 1
+  # LoRA reduces memory requirements, enabling colocated training
+  # Note: With Megatron generation backend, generation and training share the same TP setting
+  megatron_cfg:
+    enabled: true
+    # Colocated: need more aggressive memory management
+    empty_unused_memory_level: 3
+    activation_checkpointing: true
+    tensor_model_parallel_size: 4  # TP=4 for Megatron generation backend
+    pipeline_model_parallel_size: 1
+    context_parallel_size: 1
+    expert_tensor_parallel_size: 1
+    expert_model_parallel_size: 4  
+    sequence_parallel: true
+
+    apply_rope_fusion: true
+    defer_fp32_logits: true
+    bias_activation_fusion: false
+
+    optimizer:
+      optimizer: "adam"
+      lr: 1.0e-5  # Higher LR for LoRA (typical range: 1e-5 to 1e-4)
+      min_lr: 1.0e-5
+      weight_decay: 0.0
+      bf16: false  # Disabled when using FP8
+      fp16: false
+      params_dtype: "float32"
+      adam_beta1: 0.9
+      adam_beta2: 0.999
+      adam_eps: 1e-8
+      use_distributed_optimizer: true
+      clip_grad: ${policy.max_grad_norm}
+      optimizer_cpu_offload: true  # Enable CPU offload to avoid OOM during optimizer initialization (FP32 param copies)
+      optimizer_offload_fraction: 1.0
+
+    scheduler:
+      lr_decay_style: "constant"
+      lr_warmup_iters: 20
+      lr_warmup_init: 1.0e-6
+
+    distributed_data_parallel_config:
+      grad_reduce_in_fp32: false
+      # Workaround for Megatron distributed optimizer assertion during logprob fprop:
+      # `param_and_grad_buffer.py:261 assert self.param_gather_handle is None`.
+      # Disabling overlap avoids starting a new param gather while a prior one is still in-flight.
+      overlap_grad_reduce: false
+      overlap_param_gather: false
+      use_custom_fsdp: false
+      data_parallel_sharding_strategy: "optim_grads_params"
+
+    # FP8 Training Configuration (TransformerEngine)
+    #fp8_cfg:
+    #  enabled: true
+    #  fp8: "e4m3"  # FP8 format: e4m3 (4 exponent bits, 3 mantissa bits)
+    #  fp8_recipe: "blockwise"  # Blockwise scaling for better numerical stability
+    #  fp8_param: false  # Keep parameters in FP32/BF16, only activations in FP8
+
+    # Environment variables for FP8 training
+    env_vars:
+      NVTE_FP8_BLOCK_SCALING_FP32_SCALES: "1"  # Use FP32 scaling factors for better precision
+
+    peft:
+      enabled: true
+      dim: 16
+      alpha: 128
+
+  # Disable dtensor path for this config (using Megatron with LoRA)
+  dtensor_cfg:
+    _v2: true
+    enabled: false
+
+  sequence_packing:
+    enabled: true
+    train_mb_tokens: ${mul:${policy.max_total_sequence_length}, ${policy.train_micro_batch_size}}
+    logprob_mb_tokens: ${mul:${policy.max_total_sequence_length}, ${policy.logprob_batch_size}}
+    algorithm: "modified_first_fit_decreasing"
+    sequence_length_round: 64
+
+  make_sequence_length_divisible_by: ${policy.megatron_cfg.tensor_model_parallel_size}
+  max_grad_norm: 1.0
+
+  generation:
+    backend: "megatron"
+    max_new_tokens: ${policy.max_total_sequence_length}
+    temperature: 1.0
+    top_p: 1.0
+    top_k: null
+    stop_token_ids: null
+    stop_strings: null
+    # Megatron generation backend uses megatron_cfg.tensor_model_parallel_size (TP=4)
+    # Generation parallelism is controlled by megatron_cfg settings above
+    mcore_generation_config:
+      buffer_size_gb: 20  # Total GPU memory (in GB) allocated for KV cache buffers
+      num_cuda_graphs: 16  # Number of CUDA graphs to pre-compile for different batch sizes
+      block_size_tokens: 256  # Size of each KV cache block in tokens (affects memory granularity)
+      use_cuda_graphs_for_non_decode_steps: true  # Enable CUDA graphs for prefill/context processing
+      enable_chunked_prefill: false  # Split long prefills into chunks for better memory management
+      unified_memory_level: 0  # Unified memory usage level (0=disabled, higher values enable more aggressive paging)
+      max_tokens: 16384  # Maximum number of tokens to use in a single step. Analogous to vllm's max_num_batched_tokens
+    # vllm_cfg is not used when backend is "megatron", but kept for compatibility
+    vllm_cfg:
+      max_model_len: ${policy.max_total_sequence_length}
+
+data:
+  # Use the built-in NeMoRL DAPO dataset implementation (HF-backed)
+  dataset_name: DAPOMath17K
+  max_input_seq_length: 512
+  prompt_file: null  # Required by run_grpo_math.py setup_data function
+  system_prompt_file: null
+  train:
+    dataset_name: DAPOMath17K
+  validation:
+    dataset_name: DAPOMathAIME2024
+  shuffle: true
+  num_workers: 0
+  # Default settings for all datasets
+  default:
+    prompt_file: null
+    system_prompt_file: null
+    processor: "math_hf_data_processor"
+    env_name: "math"
+
+env:
+  # Math env verifier implementation. "dapo_math_verify" matches the DAPO dataset ground-truth formatting.
+  math:
+    num_workers: 16
+    math_verify_impl: "dapo_math_verify"
+  # Unused by this entrypoint, but kept for compatibility with other configs.
+  dapo:
+    num_workers: 16
+    math_verify_impl: "dapo_math_verify"
+
+logger:
+  log_dir: "logs"
+  num_val_samples_to_print: 10
+  wandb_enabled: true
+  tensorboard_enabled: false
+  mlflow_enabled: false
+  swanlab_enabled: false
+  monitor_gpus: false
+  wandb:
+    entity: nv-default-onboard
+    project: "superv3-dapo17k-nemotron-super-120b-gb200-1x4-lora"
+    name: "dapo17k-nemotron-super-120b-gb200-1x4-lora"
+  gpu_monitoring:
+    collection_interval: 10
+    flush_interval: 10
+
+cluster:
+  # Total: 1 node (colocated: Megatron generation and training share the same node, both use TP=4)
+  gpus_per_node: 4
+  num_nodes: 1
