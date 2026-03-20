@@ -18,7 +18,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from nemo_rl.utils.timer import TimeoutChecker, Timer
+from nemo_rl.utils.timer import TimeoutChecker, Timer, convert_to_seconds
 
 
 class TestTimer:
@@ -191,6 +191,12 @@ class TestTimer:
 
 
 class TestTimeoutChecker:
+    def test_convert_to_seconds_human_readable(self):
+        assert convert_to_seconds("1h") == 3600
+        assert convert_to_seconds("30m") == 1800
+        assert convert_to_seconds("1h30m") == 5400
+        assert convert_to_seconds("00:01:00:00") == 3600
+
     def test_infinite_timeout(self):
         checker = TimeoutChecker(timeout=None)
         time.sleep(0.1)

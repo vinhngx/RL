@@ -48,6 +48,7 @@ class CheckpointingConfig(TypedDict):
     save_consolidated (bool): Whether to save consolidated checkpoints (for HF compatibility).
     model_cache_dir (str): Directory for model cache (for safetensors format).
     model_repo_id (str): Repository ID for the model (for safetensors format).
+    training_timeout (str | int | float | None): Optional wall-clock training deadline.
     is_peft (bool): Whether the model uses PEFT.
     """
 
@@ -58,6 +59,7 @@ class CheckpointingConfig(TypedDict):
     save_period: int
     keep_top_k: NotRequired[int]
     checkpoint_must_save_by: NotRequired[str | None]
+    training_timeout: NotRequired[str | int | float | None]
     # New nemo-automodel integration fields
     model_save_format: NotRequired[str | None]  # Default: "safetensors"
     save_consolidated: NotRequired[bool]  # Default: False

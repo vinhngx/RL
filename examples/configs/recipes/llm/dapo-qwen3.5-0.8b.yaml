@@ -1,0 +1,97 @@
+# DAPO recipe for Qwen/Qwen3.5-0.8B-Base
+#
+# This config is intended as an easy-to-run DAPO training script for the
+# 0.8B Qwen3.5 base model. It uses the same math datasets as the other DAPO
+# recipes and enables dynamic sampling + reward shaping (the core DAPO features).
+#
+# Run with:
+#   uv run examples/run_grpo.py --config examples/configs/recipes/llm/dapo-qwen3.5-0.8b.yaml
+
+defaults: ../../grpo_math_1B.yaml
+
+grpo:
+  # DAPO-specific settings
+  use_dynamic_sampling: true
+  batch_multiplier: 3
+  reward_scaling:
+    enabled: true
+    target_min: -1.0
+  reward_shaping:
+    enabled: true
+    overlong_buffer_length: 2048
+    max_response_length: 2048
+
+loss_fn:
+  # Clip-higher + token-level loss (DAPO defaults)
+  reference_policy_kl_penalty: 0.0
+  ratio_clip_max: 0.28
+  ratio_clip_c: 10
+
+checkpointing:
+  checkpoint_dir: /home/vinhn/projects/NemoRL-results/dapo-qwen3.5-0.8b
+  keep_top_k: 5
+  save_period: 5
+  model_save_format: null
+
+policy:
+  model_name: Qwen/Qwen3.5-0.8B-Base
+  train_global_batch_size: 32
+  train_micro_batch_size: 2
+  logprob_batch_size: ${policy.train_micro_batch_size}
+  max_total_sequence_length: 2048
+  dtensor_cfg:
+    _v2: true
+    enabled: true
+    cpu_offload: false
+    tensor_parallel_size: 1
+    context_parallel_size: 1
+    sequence_parallel: false
+    activation_checkpointing: false
+  optimizer:
+    kwargs:
+      lr: 1.0e-06
+      weight_decay: 0.1
+  scheduler:
+  - name: torch.optim.lr_scheduler.LinearLR
+    kwargs:
+      start_factor: 1e-08
+      end_factor: 1.0
+      total_iters: 10
+  - name: torch.optim.lr_scheduler.ConstantLR
+    kwargs:
+      factor: 1.0
+      total_iters: 10000000000
+  generation:
+    max_new_tokens: 2048
+    vllm_cfg:
+      tensor_parallel_size: 1
+      gpu_memory_utilization: 0.7
+      enforce_eager: true
+
+data:
+  max_input_seq_length: 2048
+  train:
+    dataset_name: DAPOMath17K
+  validation:
+    dataset_name: DAPOMathAIME2024
+  default:
+    prompt_file: null
+
+env:
+  math:
+    num_workers: 4
+    math_verify_impl: dapo_math_verify
+
+logger:
+  monitor_gpus: false
+  wandb_enabled: true
+  wandb:
+    project: dapo-dev
+    name: dapo-qwen3.5-0.8b
+  mlflow:
+    experiment_name: dapo-dev
+    run_name: dapo-qwen3.5-0.8b
+
+cluster:
+  gpus_per_node: 1
+  num_nodes: 1

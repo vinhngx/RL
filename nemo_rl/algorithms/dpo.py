@@ -502,11 +502,19 @@ def dpo_train(
 ) -> None:
     # Run dpo training
     timer = Timer()
-    timeout = TimeoutChecker(
+    checkpoint_timeout = TimeoutChecker(
         timeout=master_config["checkpointing"]["checkpoint_must_save_by"],
         fit_last_save_time=True,
     )
-    timeout.start_iterations()
+    training_timeout_cfg = master_config["checkpointing"].get("training_timeout")
+    training_timeout = (
+        TimeoutChecker(timeout=training_timeout_cfg, fit_last_save_time=True)
+        if training_timeout_cfg is not None
+        else None
+    )
+    checkpoint_timeout.start_iterations()
+    if training_timeout is not None:
+        training_timeout.start_iterations()
 
     if dpo_save_state is None:
         dpo_save_state = _default_dpo_save_state()
@@ -625,7 +633,9 @@ def dpo_train(
                 dpo_save_state["consumed_samples"] += master_config["policy"][
                     "train_global_batch_size"
                 ]
-                timeout.mark_iteration()
+                checkpoint_timeout.mark_iteration()
+                if training_timeout is not None:
+                    training_timeout.mark_iteration()
 
                 should_save_by_step = (
                     is_last_step
@@ -634,7 +644,11 @@ def dpo_train(
                 )
                 # +1 because step is 0-indexed
                 # Check if timeout-based checkpointing is enabled in config.
-                should_save_by_timeout = timeout.check_save()
+                should_save_by_timeout = checkpoint_timeout.check_save()
+                if training_timeout is not None:
+                    should_save_by_timeout = (
+                        should_save_by_timeout or training_timeout.check_save()
+                    )
 
                 if master_config["checkpointing"]["enabled"] and (
                     should_save_by_step or should_save_by_timeout

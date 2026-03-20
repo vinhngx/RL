@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 import sys
 import time
 from contextlib import contextmanager
@@ -248,27 +249,60 @@ class Timer:
             self._start_times = {}
 
 
-def convert_to_seconds(time_string: str) -> int:
-    """Converts a time string in the format 'DD:HH:MM:SS' to total seconds.
+def convert_to_seconds(time_string: Union[str, int, float]) -> int:
+    """Converts a time string to total seconds.
 
     Args:
-        time_string (str): Time duration string, e.g., '00:03:45:00'.
+        time_string: Time duration string. Supported formats include:
+            - 'DD:HH:MM:SS'
+            - '1h', '30m', '45s'
+            - mixed forms like '1h30m', '2d4h'
+            - plain integer seconds
 
     Returns:
         int: Total time in seconds.
     """
-    days, hours, minutes, seconds = map(int, time_string.split(":"))
+    if isinstance(time_string, (int, float)):
+        return int(time_string)
+
+    normalized = time_string.strip().lower()
+    if not normalized:
+        raise ValueError("Timeout string cannot be empty")
+
+    if ":" in normalized:
+        days, hours, minutes, seconds = map(int, normalized.split(":"))
+        return days * 86400 + hours * 3600 + minutes * 60 + seconds
+
+    if normalized.isdigit():
+        return int(normalized)
+
+    normalized = normalized.replace(" ", "")
+    pattern = re.compile(
+        r"^(?:(?P<days>\d+)d)?(?:(?P<hours>\d+)h)?(?:(?P<minutes>\d+)m)?(?:(?P<seconds>\d+)s)?$"
+    )
+    match = pattern.fullmatch(normalized)
+    if not match or not any(match.groupdict().values()):
+        raise ValueError(
+            f"Invalid timeout format: {time_string!r}. Expected 'DD:HH:MM:SS', '1h', '30m', '45s', or plain seconds."
+        )
+
+    days = int(match.group("days") or 0)
+    hours = int(match.group("hours") or 0)
+    minutes = int(match.group("minutes") or 0)
+    seconds = int(match.group("seconds") or 0)
     return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
 class TimeoutChecker:
     def __init__(
-        self, timeout: Optional[str] = "00:03:45:00", fit_last_save_time: bool = False
+        self,
+        timeout: Optional[Union[str, int, float]] = "00:03:45:00",
+        fit_last_save_time: bool = False,
     ):
         """Initializes the TimeoutChecker.
 
         Args:
-            timeout (str or None): Timeout in format 'DD:HH:MM:SS'. If None, timeout is considered infinite.
+            timeout: Timeout in a supported duration format. If None, timeout is considered infinite.
             fit_last_save_time (bool): If True, considers average iteration time when checking timeout.
         """
         super().__init__()

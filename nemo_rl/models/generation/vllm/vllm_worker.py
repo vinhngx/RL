@@ -158,6 +158,13 @@ class BaseVllmGenerationWorker:
         self.rank = 0
         self.world_size = 1
 
+        # FlashInfer is not supported on sm70 GPUs. vLLM reads attention
+        # backend env vars at import time, so set the fallback before any
+        # vLLM module is imported.
+        if torch.cuda.get_device_capability() < (7, 5):
+            os.environ.setdefault("VLLM_DISABLE_FLASHINFER_PREFILL", "1")
+            os.environ.setdefault("VLLM_ATTENTION_BACKEND", "TRITON_ATTN")
+
         # Monkey patches for vLLM behavior. We avoid importing vllm modules
         # here to prevent side effects during initialization and instead
         # locate the files via importlib metadata.

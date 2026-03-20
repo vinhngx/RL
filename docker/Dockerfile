@@ -121,10 +121,14 @@ COPY --from=nemo-rl tools/build-custom-flashinfer.sh ./tools/build-custom-flashi
 COPY --from=nemo-rl --link research/ ./research/
 COPY --from=nemo-rl --link 3rdparty/ ./3rdparty/
 
-RUN --mount=type=ssh <<"EOF" bash -exu
+RUN --mount=type=ssh --mount=type=cache,target=/root/.cache/uv --mount=type=cache,target=/root/.cache/pip <<"EOF" bash -exu
 uv venv --seed
 if [[ -n "${BUILD_CUSTOM_VLLM:-}" ]]; then
-    bash tools/build-custom-vllm.sh ${BUILD_CUSTOM_VLLM_URL} ${BUILD_CUSTOM_VLLM_REF} ${BUILD_CUSTOM_VLLM_PRECOMPILED_WHEEL_LOCATION}
+    if [[ -n "${BUILD_CUSTOM_VLLM_PRECOMPILED_WHEEL_LOCATION:-}" ]]; then
+        bash tools/build-custom-vllm.sh "${BUILD_CUSTOM_VLLM_URL}" "${BUILD_CUSTOM_VLLM_REF}" "${BUILD_CUSTOM_VLLM_PRECOMPILED_WHEEL_LOCATION}"
+    else
+        bash tools/build-custom-vllm.sh "${BUILD_CUSTOM_VLLM_URL}" "${BUILD_CUSTOM_VLLM_REF}"
+    fi
     source 3rdparty/vllm/nemo-rl.env
 fi
 if [[ -n "${BUILD_CUSTOM_FLASHINFER:-}" ]]; then

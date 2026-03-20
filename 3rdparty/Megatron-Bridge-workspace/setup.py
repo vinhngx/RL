@@ -26,7 +26,7 @@ bridge_src_dir = "Megatron-Bridge/src/megatron/bridge"
 bridge_package_name = "megatron.bridge"
 
 CACHED_DEPENDENCIES = [
-    "transformers<5.0.0",
+    "transformers>=5.3.0,<6.0.0",
     "datasets>=2.20.0",
     "accelerate",
     "omegaconf>=2.3.0",
