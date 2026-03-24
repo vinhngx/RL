@@ -1,0 +1,86 @@
+---
+name: auto-research
+description: Autonomous NeMo RL experiment driver for accuracy-focused recipe search in this repository. Use when Codex should inspect recipe inheritance and backend code paths, run repeatable experiments, and record each hypothesis on its own git branch under a shared prefix with a TSV experiment log.
+---
+
+# Auto Research
+
+Run iterative NeMo RL experiments in this repository with accuracy as the objective and git as the ledger.
+
+Treat the container as ready. Use the recipe metric as the source of truth. Keep changes small, reproducible, and simple. Preserve unrelated user work.
+
+## Workflow
+
+1. Inspect the current git state.
+2. Use a shared branch prefix. Prefer a user-provided one; otherwise create a suggestive default such as `autoresearch/2026-03-24-dapo-qwen2p5`.
+3. Read the target recipe, its parents, and the relevant code paths in `examples/run_grpo.py`, `nemo_rl/models/`, `nemo_rl/algorithms/`, and `docs/`.
+4. Translate any user stop rule into explicit values you can monitor, such as `target_experiments`, `campaign_deadline`, `per_experiment_timeout`, or `target_metric`.
+5. Verify required data, checkpoints, and runtime inputs.
+6. Create an untracked TSV log.
+7. Run a baseline first if none exists.
+
+## Branching
+
+- Put every experiment on its own branch under the shared prefix.
+- Keep every branch, even for failed or weak ideas.
+- Put at least one commit on each branch for the hypothesis.
+- Add follow-up fix commits on the same branch when a rerun is justified.
+
+See `references/git-workflow.md` for the exact pattern.
+
+## Loop
+
+1. Pick one concrete hypothesis.
+2. Create a branch such as `autoresearch/2026-03-24-dapo-qwen2p5/prompt-compact-schema`.
+3. Edit the smallest set of files needed.
+4. Commit the hypothesis.
+5. Before launching the run, check the monitored stop conditions. Do not stop early unless one is already clearly met.
+6. Run with log redirection:
+
+```bash
+uv run <entrypoint> > run.log 2>&1
+grep "^val_accuracy:\|^accuracy:" run.log
+grep "^peak_vram_mb:" run.log
+```
+
+7. If the user gave a per-experiment wall-clock limit, enforce it explicitly. Prefer a recipe-level timeout when one already exists; otherwise wrap the command with an external timeout. If both exist, honor the tighter limit.
+8. If the primary-metric grep is empty, inspect `tail -n 50 run.log`.
+9. Record branch, commit, recipe, primary metric, memory, status, and description in the TSV, along with enough timing or count information to evaluate the stop rule.
+10. Re-check the monitored stop conditions after the experiment completes.
+11. Mark the result as `keep`, `discard`, or `crash`, then move to the next branch unless a user-specified stop condition has been clearly met.
+
+For count-based stop rules, count completed experiments, not attempted ideas.
+
+For campaign time budgets, convert the user limit into an absolute deadline at the start of the campaign and keep checking remaining time.
+
+For per-experiment budgets, enforce a timeout on every run and treat overruns as failures.
+
+Examples:
+- `do 50 experiments`: stop only after 50 completed experiment rows exist in the TSV
+- `10h total, 1h each`: enforce a 1 hour limit per run and stop when the 10 hour campaign budget is reached, or when there is not enough remaining budget to start another 1 hour run
+- `50 experiments or 10h total, 1h each`: monitor all three values, never exceed the per-run cap, and stop only when one campaign-level stop trigger is clearly reached
+
+## Priorities
+
+Prefer ideas with high expected accuracy gain and low complexity cost:
+- correctness and backend compatibility
+- prompt and rollout formatting
+- batch, sequence, and precision layout
+- optimizer and scheduler tuning
+- reward shaping, clipping, or scaling
+- dataset mix or validation changes
+- synchronous versus asynchronous execution based on hardware
+
+All else equal, prefer simpler wins and avoid brittle hardware-specific hacks.
+
+## Stop
+
+If the user gives explicit stopping conditions, they override the generic rule. Do not stop because the search feels sufficient; stop only when the requested count, deadline, budget, or target condition has been clearly met.
+
+If the user does not give explicit stopping conditions, stop when you have a clearly better strategy, the nearby search space is exhausted, or the user asks you to stop.
+
+## References
+
+- `references/git-workflow.md`
+- `references/exploration-ideas.md`
+- `references/experiment-log-template.md`

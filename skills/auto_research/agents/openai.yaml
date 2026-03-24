@@ -1,0 +1,4 @@
+interface:
+  display_name: "Auto Research"
+  short_description: "Run disciplined NeMo RL experiment searches"
+  default_prompt: "Use $auto-research to run an accuracy-focused NeMo RL experiment loop in this repository."
