@@ -46,17 +46,18 @@ grep "^peak_vram_mb:" run.log
 7. If the user gave a per-experiment wall-clock limit, enforce it explicitly. Prefer a recipe-level timeout when one already exists; otherwise wrap the command with an external timeout. If both exist, honor the tighter limit.
 8. If the primary-metric grep is empty, inspect `tail -n 50 run.log`.
 9. Record branch, commit, recipe, primary metric, memory, status, and description in the TSV, along with enough timing or count information to evaluate the stop rule.
-10. Re-check the monitored stop conditions after the experiment completes.
-11. Mark the result as `keep`, `discard`, or `crash`, then move to the next branch unless a user-specified stop condition has been clearly met.
+10. Periodically print user-facing progress updates during the campaign. Include the current branch, latest known result, attempted experiment count, remaining experiment count if applicable, remaining campaign time if applicable, and whether any stop condition has been met yet.
+11. Re-check the monitored stop conditions after the experiment completes and state the result explicitly, for example `stop condition not yet met: 17/24 attempted, 6h12m remaining` or `stop condition met: 24/24 attempted`.
+12. Mark the result as `keep`, `discard`, or `crash`, then move to the next branch unless a user-specified stop condition has been clearly met.
 
-For count-based stop rules, count completed experiments, not attempted ideas.
+For count-based stop rules, count attempted ideas, not only successful or fully completed runs.
 
 For campaign time budgets, convert the user limit into an absolute deadline at the start of the campaign and keep checking remaining time.
 
 For per-experiment budgets, enforce a timeout on every run and treat overruns as failures.
 
 Examples:
-- `do 50 experiments`: stop only after 50 completed experiment rows exist in the TSV
+- `do 50 experiments`: stop only after 50 attempted experiment rows exist in the TSV
 - `10h total, 1h each`: enforce a 1 hour limit per run and stop when the 10 hour campaign budget is reached, or when there is not enough remaining budget to start another 1 hour run
 - `50 experiments or 10h total, 1h each`: monitor all three values, never exceed the per-run cap, and stop only when one campaign-level stop trigger is clearly reached
 
@@ -76,6 +77,8 @@ All else equal, prefer simpler wins and avoid brittle hardware-specific hacks.
 ## Stop
 
 If the user gives explicit stopping conditions, they override the generic rule. Do not stop because the search feels sufficient; stop only when the requested count, deadline, budget, or target condition has been clearly met.
+
+During the campaign, explicitly inform the user whether the stop condition has been met. If not, report the remaining count, remaining time, or other remaining threshold in concrete terms.
 
 If the user does not give explicit stopping conditions, stop when you have a clearly better strategy, the nearby search space is exhausted, or the user asks you to stop.
 

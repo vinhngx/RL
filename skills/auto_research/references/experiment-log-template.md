@@ -10,7 +10,7 @@ index	branch	commit	recipe	metric	memory_gb	elapsed_min	status	description
 ```
 
 Suggested interpretation:
-- `index` is the completed experiment count; use it for rules like `do 50 experiments`
+- `index` is the attempted experiment count; use it for rules like `do 50 experiments`
 - `metric` should be the primary task or validation metric reported by the recipe, such as `val_accuracy` or `accuracy`
 - `elapsed_min` is the wall-clock duration of the run; sum it or compare it against the remaining budget when the user gives time limits
 - `memory_gb` is an auxiliary resource signal, not the target metric

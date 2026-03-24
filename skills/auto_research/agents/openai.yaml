@@ -1,4 +1,4 @@
 interface:
   display_name: "Auto Research"
-  short_description: "Run disciplined NeMo RL experiment searches"
-  default_prompt: "Use $auto-research to run an accuracy-focused NeMo RL experiment loop in this repository."
+  short_description: "Run NeMo RL experiment campaigns in ready containers"
+  default_prompt: "Use $auto-research to run an accuracy-focused NeMo RL experiment campaign in a ready-to-use container with dependencies, data access, and GPU runtime already available."
