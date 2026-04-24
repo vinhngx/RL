@@ -1,0 +1,33 @@
+defaults: circle_click_qwen3_vl_2b_1gpu_lora_dense_reward_large_batch_1000px_clean_temp005.yaml
+
+grpo:
+  max_num_steps: 80
+
+checkpointing:
+  checkpoint_dir: results/circle_click_qwen3_vl_2b_lora_dense_reward_large_batch_1000px_light_hard_purple_mix_temp005_best_step60_continue80
+  load_optimizer: false
+
+data:
+  _override_: true
+  max_input_seq_length: null
+  num_workers: 1
+  shuffle: true
+  use_multiple_dataloader: false
+  train:
+    - data_path: tutorial/data/circle_click_1000_clean3800_hard_purple200_forced_tool/train.jsonl
+      dataset_name: NemoGymDataset
+      env_name: nemo_gym
+      processor: nemo_gym_data_processor
+  validation:
+    - data_path: tutorial/data/circle_click_1000_clean3800_hard_purple200_forced_tool/validation.jsonl
+      dataset_name: NemoGymDataset
+      env_name: nemo_gym
+      processor: nemo_gym_data_processor
+
+logger:
+  log_dir: logs/circle_click_qwen3_vl_2b_lora_dense_reward_large_batch_1000px_light_hard_purple_mix_temp005_best_step60_continue80
+  num_val_samples_to_print: 8
+  wandb_enabled: true
+  wandb:
+    project: circle-click-nemorl-nemogym
+    name: qwen3-vl-2b-lora-dense-reward-large-batch-1000px-light-hard-purple-mix-temp005-best-step60-continue80-attempt38

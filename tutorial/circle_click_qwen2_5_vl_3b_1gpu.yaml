@@ -1,7 +1,7 @@
 defaults: ../examples/configs/vlm_grpo_3B.yaml
 
 grpo:
-  num_prompts_per_step: 4
+  num_prompts_per_step: 32
   num_generations_per_prompt: 8
   num_val_generations_per_prompt: 1
   max_num_epochs: 1
@@ -26,9 +26,9 @@ checkpointing:
 
 policy:
   model_name: Qwen/Qwen2.5-VL-3B-Instruct
-  train_global_batch_size: 32
+  train_global_batch_size: 256
   train_micro_batch_size: 1
-  generation_batch_size: 8
+  generation_batch_size: 32
   logprob_batch_size: 1
   max_total_sequence_length: 4096
   precision: bfloat16
@@ -101,7 +101,7 @@ env:
 
 logger:
   log_dir: logs/circle_click_qwen2_5_vl_3b
-  num_val_samples_to_print: 0
+  num_val_samples_to_print: 8
   wandb_enabled: false
   tensorboard_enabled: true
   swanlab_enabled: false
