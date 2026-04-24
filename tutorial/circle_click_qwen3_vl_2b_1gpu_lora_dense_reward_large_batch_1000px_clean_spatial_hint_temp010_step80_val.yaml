@@ -1,0 +1,18 @@
+defaults: circle_click_qwen3_vl_2b_1gpu_lora_dense_reward_large_batch_1000px_clean_spatial_hint_temp0001_step80_val.yaml
+
+checkpointing:
+  checkpoint_dir: results/circle_click_qwen3_vl_2b_lora_dense_reward_large_batch_1000px_clean_spatial_hint_temp005_step80_temp010_val
+  load_optimizer: false
+
+policy:
+  generation:
+    temperature: 0.1
+    top_p: 1.0
+
+logger:
+  log_dir: logs/circle_click_qwen3_vl_2b_lora_dense_reward_large_batch_1000px_clean_spatial_hint_temp010_step80_val
+  num_val_samples_to_print: 8
+  wandb_enabled: true
+  wandb:
+    project: circle-click-nemorl-nemogym
+    name: qwen3-vl-2b-lora-dense-reward-large-batch-1000px-clean-spatial-hint-temp010-step80-val-attempt49
