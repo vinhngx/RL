@@ -14,10 +14,14 @@ data:
   train:
     - data_path: tutorial/data/circle_click_1000_clean_forced_tool_spatial_hint/train.jsonl
       dataset_name: NemoGymDataset
+      env_name: nemo_gym
+      processor: nemo_gym_data_processor
       split: train
   validation:
     - data_path: tutorial/data/circle_click_1000_clean_forced_tool_spatial_hint/validation.jsonl
       dataset_name: NemoGymDataset
+      env_name: nemo_gym
+      processor: nemo_gym_data_processor
 
 logger:
   log_dir: logs/circle_click_qwen3_vl_2b_lora_dense_reward_large_batch_1000px_clean_spatial_hint_temp005_best_step60_continue70
