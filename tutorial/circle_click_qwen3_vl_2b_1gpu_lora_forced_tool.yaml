@@ -2,6 +2,9 @@ defaults: circle_click_qwen3_vl_2b_1gpu_lora.yaml
 
 data:
   _override_: true
+  max_input_seq_length: null
+  num_workers: 1
+  shuffle: true
   use_multiple_dataloader: false
   train:
     - data_path: tutorial/data/circle_click_forced_tool/train.jsonl
@@ -19,4 +22,4 @@ logger:
   wandb_enabled: true
   wandb:
     project: circle-click-nemorl-nemogym
-    name: qwen3-vl-2b-lora-forced-tool-attempt17
+    name: qwen3-vl-2b-lora-forced-tool-attempt18
