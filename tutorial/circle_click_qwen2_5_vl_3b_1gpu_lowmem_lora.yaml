@@ -4,7 +4,7 @@ grpo:
   num_prompts_per_step: 1
   num_generations_per_prompt: 4
   max_num_steps: 200
-  max_val_samples: 128
+  max_val_samples: null
   val_batch_size: 128
 
 checkpointing:
@@ -37,4 +37,4 @@ logger:
   wandb_enabled: true
   wandb:
     project: circle-click-nemorl-nemogym
-    name: lowmem-lora-qwen2p5-vl-3b-attempt11
+    name: lowmem-lora-qwen2p5-vl-3b-attempt12
