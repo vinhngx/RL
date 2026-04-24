@@ -1,19 +1,19 @@
 defaults: circle_click_qwen2_5_vl_3b_1gpu.yaml
 
 grpo:
-  num_prompts_per_step: 1
-  num_generations_per_prompt: 4
+  num_prompts_per_step: 32
+  num_generations_per_prompt: 8
   max_num_steps: 200
   max_val_samples: null
   val_batch_size: 128
 
 checkpointing:
-  checkpoint_dir: results/circle_click_qwen2_5_vl_3b_lowmem_lora
+  checkpoint_dir: results/circle_click_qwen2_5_vl_3b_lowmem_lora_large_batch
 
 policy:
-  train_global_batch_size: 4
+  train_global_batch_size: 256
   train_micro_batch_size: 1
-  generation_batch_size: 4
+  generation_batch_size: 32
   logprob_batch_size: 1
   offload_optimizer_for_logprob: true
   dtensor_cfg:
@@ -34,7 +34,9 @@ policy:
       gpu_memory_utilization: 0.30
 
 logger:
+  log_dir: logs/circle_click_qwen2_5_vl_3b_lowmem_lora_large_batch
+  num_val_samples_to_print: 8
   wandb_enabled: true
   wandb:
     project: circle-click-nemorl-nemogym
-    name: lowmem-lora-qwen2p5-vl-3b-attempt13
+    name: lowmem-lora-qwen2p5-vl-3b-large-batch-32x8
