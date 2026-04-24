@@ -25,4 +25,4 @@ logger:
   wandb_enabled: true
   wandb:
     project: circle-click-nemorl-nemogym
-    name: qwen3-vl-2b-lora-forced-tool-attempt19
+    name: qwen3-vl-2b-lora-forced-tool-attempt20

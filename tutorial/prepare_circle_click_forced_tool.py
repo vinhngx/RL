@@ -19,7 +19,10 @@ def rewrite_jsonl(name: str) -> None:
     ) as outfile:
         for line in infile:
             row = json.loads(line)
-            row["responses_create_params"]["tool_choice"] = "required"
+            row["responses_create_params"]["tool_choice"] = {
+                "type": "function",
+                "name": "click",
+            }
             outfile.write(json.dumps(row, separators=(",", ":")) + "\n")
 
 
