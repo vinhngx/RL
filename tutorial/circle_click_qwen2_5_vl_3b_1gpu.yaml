@@ -73,6 +73,7 @@ policy:
       enabled: true
 
 data:
+  _override_: true
   max_input_seq_length: null
   shuffle: true
   num_workers: 1
