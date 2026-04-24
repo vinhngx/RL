@@ -1,0 +1,14 @@
+circle_click_simple_agent:
+  responses_api_agents:
+    simple_agent:
+      datasets:
+      - name: circle_click_train
+        type: train
+        jsonl_fpath: resources_servers/circle_click/data/train.jsonl
+        num_repeats: 1
+        license: Apache 2.0
+      - name: circle_click_validation
+        type: validation
+        jsonl_fpath: resources_servers/circle_click/data/validation.jsonl
+        num_repeats: 1
+        license: Apache 2.0

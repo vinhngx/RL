@@ -1,0 +1,111 @@
+defaults: ../examples/configs/vlm_grpo_3B.yaml
+
+grpo:
+  num_prompts_per_step: 4
+  num_generations_per_prompt: 8
+  num_val_generations_per_prompt: 1
+  max_num_epochs: 1
+  max_num_steps: 200
+  val_period: 10
+  val_at_start: true
+  val_at_end: true
+  max_val_samples: null
+  val_batch_size: 128
+  use_dynamic_sampling: false
+
+loss_fn:
+  reference_policy_kl_penalty: 0.01
+
+checkpointing:
+  enabled: true
+  checkpoint_dir: results/circle_click_qwen2_5_vl_3b
+  metric_name: val:total_reward/mean
+  higher_is_better: true
+  keep_top_k: 3
+  save_period: 10
+
+policy:
+  model_name: Qwen/Qwen2.5-VL-3B-Instruct
+  train_global_batch_size: 32
+  train_micro_batch_size: 1
+  generation_batch_size: 8
+  logprob_batch_size: 1
+  max_total_sequence_length: 4096
+  precision: bfloat16
+  dtensor_cfg:
+    enabled: true
+    cpu_offload: false
+    activation_checkpointing: true
+    tensor_parallel_size: 1
+    context_parallel_size: 1
+  dynamic_batching:
+    enabled: true
+    train_mb_tokens: ${mul:${policy.max_total_sequence_length}, ${policy.train_micro_batch_size}}
+    logprob_mb_tokens: ${mul:${policy.max_total_sequence_length}, ${policy.logprob_batch_size}}
+    sequence_length_round: 64
+  optimizer:
+    kwargs:
+      lr: 1.0e-6
+  generation:
+    backend: vllm
+    max_new_tokens: 128
+    temperature: 1.0
+    top_p: 1.0
+    top_k: null
+    stop_token_ids: null
+    stop_strings: null
+    vllm_cfg:
+      async_engine: true
+      expose_http_server: true
+      precision: ${policy.precision}
+      kv_cache_dtype: auto
+      tensor_parallel_size: 1
+      pipeline_parallel_size: 1
+      expert_parallel_size: 1
+      gpu_memory_utilization: 0.45
+      max_model_len: ${policy.max_total_sequence_length}
+      enforce_eager: false
+      skip_tokenizer_init: false
+      http_server_serving_chat_kwargs:
+        enable_auto_tools: true
+        tool_parser: hermes
+    colocated:
+      enabled: true
+
+data:
+  max_input_seq_length: null
+  shuffle: true
+  num_workers: 1
+  train:
+    data_path: tutorial/data/circle_click/train.jsonl
+  validation:
+    data_path: tutorial/data/circle_click/validation.jsonl
+  default:
+    dataset_name: NemoGymDataset
+    env_name: nemo_gym
+    prompt_file: null
+    system_prompt_file: null
+    processor: nemo_gym_data_processor
+
+env:
+  _override_: true
+  should_use_nemo_gym: true
+  should_log_nemo_gym_responses: true
+  nemo_gym:
+    config_paths:
+    - resources_servers/circle_click/configs/circle_click.yaml
+    - responses_api_models/vllm_model/configs/vllm_model_for_training.yaml
+    rollout_max_attempts_to_avoid_lp_nan: 2
+
+logger:
+  log_dir: logs/circle_click_qwen2_5_vl_3b
+  num_val_samples_to_print: 0
+  wandb_enabled: false
+  tensorboard_enabled: true
+  swanlab_enabled: false
+  mlflow_enabled: false
+  monitor_gpus: true
+
+cluster:
+  gpus_per_node: 1
+  num_nodes: 1
