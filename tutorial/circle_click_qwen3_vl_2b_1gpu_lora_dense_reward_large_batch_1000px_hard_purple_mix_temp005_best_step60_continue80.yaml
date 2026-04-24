@@ -8,10 +8,21 @@ checkpointing:
   load_optimizer: false
 
 data:
+  _override_: true
+  max_input_seq_length: null
+  num_workers: 1
+  shuffle: true
+  use_multiple_dataloader: false
   train:
-    data_path: tutorial/data/circle_click_1000_clean3000_hard_purple1000_forced_tool/train.jsonl
+    - data_path: tutorial/data/circle_click_1000_clean3000_hard_purple1000_forced_tool/train.jsonl
+      dataset_name: NemoGymDataset
+      env_name: nemo_gym
+      processor: nemo_gym_data_processor
   validation:
-    data_path: tutorial/data/circle_click_1000_clean3000_hard_purple1000_forced_tool/validation.jsonl
+    - data_path: tutorial/data/circle_click_1000_clean3000_hard_purple1000_forced_tool/validation.jsonl
+      dataset_name: NemoGymDataset
+      env_name: nemo_gym
+      processor: nemo_gym_data_processor
 
 logger:
   log_dir: logs/circle_click_qwen3_vl_2b_lora_dense_reward_large_batch_1000px_hard_purple_mix_temp005_best_step60_continue80
