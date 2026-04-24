@@ -60,6 +60,7 @@ class CheckpointingConfig(TypedDict):
     keep_top_k: NotRequired[int]
     checkpoint_must_save_by: NotRequired[str | None]
     training_timeout: NotRequired[str | int | float | None]
+    load_optimizer: NotRequired[bool]
     # New nemo-automodel integration fields
     model_save_format: NotRequired[str | None]  # Default: "safetensors"
     save_consolidated: NotRequired[bool]  # Default: False

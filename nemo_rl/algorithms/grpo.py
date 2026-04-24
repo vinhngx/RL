@@ -548,7 +548,14 @@ def setup(
     # Prepare checkpoint paths
     if last_checkpoint_path:
         weights_path = Path(last_checkpoint_path) / "policy" / "weights"
-        optimizer_path = Path(last_checkpoint_path) / "policy" / "optimizer"
+        if master_config["checkpointing"].get("load_optimizer", True):
+            optimizer_path = Path(last_checkpoint_path) / "policy" / "optimizer"
+        else:
+            optimizer_path = None
+            print(
+                "  ✓ Loading checkpoint weights without optimizer state",
+                flush=True,
+            )
     else:
         weights_path = None
         optimizer_path = None
