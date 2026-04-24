@@ -17,7 +17,7 @@ policy:
   logprob_batch_size: 1
   offload_optimizer_for_logprob: true
   dtensor_cfg:
-    cpu_offload: true
+    cpu_offload: false
     lora_cfg:
       enabled: true
       target_modules: []
@@ -37,4 +37,4 @@ logger:
   wandb_enabled: true
   wandb:
     project: circle-click-nemorl-nemogym
-    name: lowmem-lora-qwen2p5-vl-3b-attempt12
+    name: lowmem-lora-qwen2p5-vl-3b-attempt13
