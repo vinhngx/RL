@@ -103,6 +103,13 @@ def init_ray(log_dir: Optional[str] = None) -> None:
     env_vars.pop("RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES", None)
     runtime_env = {
         "env_vars": env_vars,  # Pass thru all user environment variables
+        "excludes": [
+            "/tutorial/data/**",
+            "/logs/**",
+            "/results/**",
+            "/raytmp/**",
+            "/3rdparty/Gym-workspace/Gym/resources_servers/labbench2_vlm/data/test_media/**",
+        ],
     }
 
     cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "ALL")
