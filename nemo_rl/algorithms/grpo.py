@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import json
 import os
 import time
 import warnings
@@ -2332,6 +2333,24 @@ def validate(
             accuracy = rewards_t.mean().item()
         else:
             accuracy = 0.0
+
+        hit_values = []
+        dense_rewards = []
+        for debug_sample in all_nemo_gym_debug:
+            try:
+                debug = json.loads(debug_sample)
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if debug.get("hit") is not None:
+                hit_values.append(float(bool(debug["hit"])))
+            if debug.get("reward") is not None:
+                dense_rewards.append(float(debug["reward"]))
+        if hit_values:
+            if dense_rewards:
+                additional_metrics_to_report["dense_reward"] = (
+                    sum(dense_rewards) / len(dense_rewards)
+                )
+            accuracy = sum(hit_values) / len(hit_values)
 
         avg_length = (
             sum(total_lengths) / len(total_lengths) if len(total_lengths) > 0 else 0.0

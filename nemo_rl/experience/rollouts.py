@@ -1298,6 +1298,14 @@ def _summarize_nemo_gym_result(nemo_gym_row: dict[str, Any], result: dict[str, A
     full_result = result["full_result"]
     response = full_result.get("response", {})
     response_output = response.get("output", [])
+    target_color = full_result.get("target_color") or nemo_gym_row.get("target_color")
+    circles = full_result.get("circles") or nemo_gym_row.get("circles")
+    target_circle = None
+    if target_color is not None and circles:
+        target_circle = next(
+            (circle for circle in circles if circle.get("color") == target_color),
+            None,
+        )
 
     generations = []
     for output_item in response_output:
@@ -1308,11 +1316,14 @@ def _summarize_nemo_gym_result(nemo_gym_row: dict[str, Any], result: dict[str, A
 
     debug = {
         "reward": full_result.get("reward"),
-        "target_color": full_result.get("target_color"),
-        "circles": full_result.get("circles"),
+        "binary_reward": full_result.get("binary_reward"),
+        "target_color": target_color,
+        "target_circle": target_circle,
+        "circles": circles,
         "clicked_x": full_result.get("clicked_x"),
         "clicked_y": full_result.get("clicked_y"),
         "hit": full_result.get("hit"),
+        "center_distance": full_result.get("center_distance"),
         "response_output": response_output,
         "generation_str": generations,
         "tool_choice": nemo_gym_row.get("responses_create_params", {}).get("tool_choice"),
