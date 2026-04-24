@@ -1,0 +1,21 @@
+defaults: circle_click_qwen2_5_vl_3b_1gpu_lowmem_lora.yaml
+
+checkpointing:
+  checkpoint_dir: results/circle_click_qwen3_vl_2b_lora
+
+policy:
+  model_name: Qwen/Qwen3-VL-2B-Instruct
+  tokenizer:
+    name: Qwen/Qwen3-VL-2B-Instruct
+  generation:
+    vllm_cfg:
+      http_server_serving_chat_kwargs:
+        enable_auto_tools: true
+        tool_parser: qwen3_xml
+
+logger:
+  log_dir: logs/circle_click_qwen3_vl_2b_lora
+  wandb_enabled: true
+  wandb:
+    project: circle-click-nemorl-nemogym
+    name: qwen3-vl-2b-lora-tools-attempt14
