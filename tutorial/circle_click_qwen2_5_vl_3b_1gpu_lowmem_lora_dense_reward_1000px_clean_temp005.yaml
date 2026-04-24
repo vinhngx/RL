@@ -1,0 +1,49 @@
+defaults: circle_click_qwen2_5_vl_3b_1gpu_lowmem_lora.yaml
+
+grpo:
+  max_num_steps: 40
+  val_at_start: true
+  val_at_end: true
+  val_period: 10
+
+checkpointing:
+  checkpoint_dir: results/circle_click_qwen2_5_vl_3b_lowmem_lora_dense_reward_1000px_clean_temp005
+
+policy:
+  generation:
+    temperature: 0.05
+    top_p: 1.0
+    max_new_tokens: 128
+
+data:
+  _override_: true
+  max_input_seq_length: null
+  num_workers: 1
+  shuffle: true
+  use_multiple_dataloader: false
+  train:
+    - data_path: tutorial/data/circle_click_1000_clean_forced_tool/train.jsonl
+      dataset_name: NemoGymDataset
+      env_name: nemo_gym
+      processor: nemo_gym_data_processor
+  validation:
+    - data_path: tutorial/data/circle_click_1000_clean_forced_tool/validation.jsonl
+      dataset_name: NemoGymDataset
+      env_name: nemo_gym
+      processor: nemo_gym_data_processor
+
+env:
+  nemo_gym:
+    circle_click:
+      resources_servers:
+        circle_click:
+          dense_reward: true
+          dense_reward_temperature: 2.0
+
+logger:
+  log_dir: logs/circle_click_qwen2_5_vl_3b_lowmem_lora_dense_reward_1000px_clean_temp005
+  num_val_samples_to_print: 8
+  wandb_enabled: true
+  wandb:
+    project: circle-click-nemorl-nemogym
+    name: qwen2p5-vl-3b-lowmem-lora-dense-reward-1000px-clean-temp005-attempt42
