@@ -24,6 +24,10 @@ def rewrite_jsonl(src_dir: Path, dst_dir: Path, name: str) -> None:
                 "type": "function",
                 "name": "click",
             }
+            row.setdefault(
+                "agent_ref",
+                {"type": "responses_api_agents", "name": "circle_click_simple_agent"},
+            )
             outfile.write(json.dumps(row, separators=(",", ":")) + "\n")
 
 
