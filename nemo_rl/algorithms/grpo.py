@@ -2251,6 +2251,7 @@ def validate(
         total_rewards = []
         total_lengths = []
         all_message_logs = []  # Collect all message logs
+        all_nemo_gym_debug = []
 
         max_batches = (
             master_config["grpo"]["max_val_samples"]
@@ -2302,6 +2303,8 @@ def validate(
 
             total_rewards.extend(val_batch["total_reward"].tolist())
             total_lengths.append(gen_metrics["mean_gen_tokens_per_sample"])
+            if "nemo_gym_debug" in val_batch:
+                all_nemo_gym_debug.extend(val_batch["nemo_gym_debug"])
 
             # Collect message logs for later display
             to_env = [
@@ -2312,6 +2315,15 @@ def validate(
             ]
 
             all_message_logs.extend(to_env)
+
+        num_debug_samples = min(
+            master_config["logger"]["num_val_samples_to_print"],
+            len(all_nemo_gym_debug),
+        )
+        if num_debug_samples > 0:
+            print("\n🔎 NeMoGym validation debug samples:", flush=True)
+            for i in range(num_debug_samples):
+                print(f"  sample {i}: {all_nemo_gym_debug[i]}", flush=True)
 
         # Calculate validation metrics
         num_samples = len(total_rewards)
@@ -2367,6 +2379,8 @@ def validate(
             "content": all_message_logs,
             "rewards": total_rewards,
         }
+        if all_nemo_gym_debug:
+            val_log_data["nemo_gym_debug"] = all_nemo_gym_debug
         logger.log_batched_dict_as_jsonl(val_log_data, f"val_data_step{step}.jsonl")
 
     # Make sure to reset the timer after validation

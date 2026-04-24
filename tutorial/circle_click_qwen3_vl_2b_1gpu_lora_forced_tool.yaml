@@ -22,7 +22,8 @@ data:
 
 logger:
   log_dir: logs/circle_click_qwen3_vl_2b_lora_forced_tool
+  num_val_samples_to_print: 8
   wandb_enabled: true
   wandb:
     project: circle-click-nemorl-nemogym
-    name: qwen3-vl-2b-lora-forced-tool-attempt20
+    name: qwen3-vl-2b-lora-forced-tool-debug-samples-attempt21

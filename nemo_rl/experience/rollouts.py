@@ -1279,6 +1279,10 @@ def run_async_nemo_gym_rollout(
             "truncated": torch.tensor(
                 [m["hit_max_tokens"] for m in all_sample_metrics], dtype=torch.bool
             ),
+            "nemo_gym_debug": [
+                _summarize_nemo_gym_result(row, result)
+                for row, result in zip(nemo_gym_rows, results)
+            ],
         }
     )
 
@@ -1287,3 +1291,30 @@ def run_async_nemo_gym_rollout(
         final_batch=final_batch,
         rollout_metrics=rollout_metrics,
     )
+
+
+def _summarize_nemo_gym_result(nemo_gym_row: dict[str, Any], result: dict[str, Any]) -> str:
+    """Create a compact JSON debug record for NeMoGym validation samples."""
+    full_result = result["full_result"]
+    response = full_result.get("response", {})
+    response_output = response.get("output", [])
+
+    generations = []
+    for output_item in response_output:
+        if isinstance(output_item, dict):
+            generation = output_item.get("generation_str")
+            if generation is not None:
+                generations.append(generation)
+
+    debug = {
+        "reward": full_result.get("reward"),
+        "target_color": full_result.get("target_color"),
+        "circles": full_result.get("circles"),
+        "clicked_x": full_result.get("clicked_x"),
+        "clicked_y": full_result.get("clicked_y"),
+        "hit": full_result.get("hit"),
+        "response_output": response_output,
+        "generation_str": generations,
+        "tool_choice": nemo_gym_row.get("responses_create_params", {}).get("tool_choice"),
+    }
+    return json.dumps(debug, separators=(",", ":"), default=str)
