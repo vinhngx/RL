@@ -1,0 +1,40 @@
+defaults: circle_count_qwen3_vl_2b_from_step35_dense_temp1_seed9696_lr1e9.yaml
+
+env:
+  nemo_gym:
+    circle_count:
+      resources_servers:
+        circle_count:
+          accept_plain_integer_answer: true
+          dense_reward: true
+          dense_reward_mode: relative_exp
+          dense_reward_temperature: 1.0
+
+grpo:
+  max_num_steps: 60
+  max_num_epochs: 1
+  val_period: 1
+  val_at_start: true
+  val_at_end: true
+  seed: 14141
+
+checkpointing:
+  checkpoint_dir: results/circle_count_qwen3_vl_2b_from_step35_relative_dense_temp1_seed14141_lr1e9
+  load_optimizer: false
+  save_period: 1
+
+policy:
+  optimizer:
+    kwargs:
+      lr: 1.0e-9
+  generation:
+    max_new_tokens: 8
+    temperature: 0.1
+    top_p: 1.0
+
+logger:
+  log_dir: logs/circle_count_qwen3_vl_2b_from_step35_relative_dense_temp1_seed14141_lr1e9
+  num_val_samples_to_print: 20
+  wandb:
+    project: circle-count-nemorl-nemogym
+    name: qwen3-vl-2b-from-step35-relative-dense-temp1-seed14141-lr1e9

@@ -1,0 +1,2 @@
+started_utc	branch	commit	config	hypothesis	status	best_exact_accuracy	best_exact_correct	best_step	wandb_url	notes
+2026-04-28T03:46:45Z	autoresearch-2026-04-28-circle-count-relative-dense-temp1	pending	tutorial/circle_count_qwen3_vl_2b_from_step35_relative_dense_temp1_seed14141_lr1e9.yaml	Relative dense reward should improve high-count near-miss credit assignment versus absolute error.	launching					4h campaign budget; baseline to beat is 389/512 = 75.98%.
