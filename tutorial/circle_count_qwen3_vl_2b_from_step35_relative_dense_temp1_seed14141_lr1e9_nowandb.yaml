@@ -1,0 +1,8 @@
+defaults: circle_count_qwen3_vl_2b_from_step35_relative_dense_temp1_seed14141_lr1e9.yaml
+
+checkpointing:
+  checkpoint_dir: results/circle_count_qwen3_vl_2b_from_step35_relative_dense_temp1_seed14141_lr1e9_nowandb
+
+logger:
+  log_dir: logs/circle_count_qwen3_vl_2b_from_step35_relative_dense_temp1_seed14141_lr1e9_nowandb
+  wandb_enabled: false
