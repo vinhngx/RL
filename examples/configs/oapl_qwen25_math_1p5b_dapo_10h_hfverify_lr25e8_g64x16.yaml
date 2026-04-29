@@ -1,0 +1,23 @@
+# Auto-research variant: keep the viable HF verifier + G=16 setup, but reduce LR.
+defaults: oapl_qwen25_math_1p5b_dapo_10h_hfverify_g64x16.yaml
+
+checkpointing:
+  checkpoint_dir: /ephemeral/nemo-rl/results/oapl_qwen25_math_1p5b_dapo_10h_hfverify_lr25e8_g64x16
+  save_period: 10
+  checkpoint_must_save_by: null
+  training_timeout: 8h
+
+policy:
+  optimizer:
+    kwargs:
+      lr: 2.5e-7
+      weight_decay: 0.1
+
+logger:
+  log_dir: /ephemeral/nemo-rl/logs/oapl_qwen25_math_1p5b_dapo_10h_hfverify_lr25e8_g64x16
+  wandb:
+    name: oapl-qwen25-math-1p5b-dapo-10h-hfverify-lr25e8-g64x16
+  tensorboard:
+    log_dir: /ephemeral/nemo-rl/tensorboard/oapl_qwen25_math_1p5b_dapo_10h_hfverify_lr25e8_g64x16
+  mlflow:
+    run_name: oapl-qwen25-math-1p5b-dapo-10h-hfverify-lr25e8-g64x16
