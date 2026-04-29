@@ -1,0 +1,130 @@
+# 100-step DAPO comparison run on Qwen2.5-Math-1.5B-Instruct.
+#
+# Matched to the strongest OAPL campaign shape:
+#   64 prompts/step * 16 generations/prompt = train GBS 1024
+# Uses the HF math verifier because Qwen2.5-Math commonly emits boxed answers,
+# which the DAPO verifier rejected during the OAPL campaign.
+defaults: grpo_math_1B.yaml
+
+grpo:
+  num_prompts_per_step: 64
+  num_generations_per_prompt: 16
+  max_num_steps: 100
+  max_num_epochs: 1
+  normalize_rewards: true
+  use_leave_one_out_baseline: false
+  val_period: 10
+  val_at_start: true
+  val_at_end: true
+  max_val_samples: 256
+  val_batch_size: 64
+  use_dynamic_sampling: true
+  dynamic_sampling_max_gen_batches: 10
+  batch_multiplier: 3
+  skip_reference_policy_logprobs_calculation: true
+  seq_logprob_error_threshold: null
+  reward_scaling:
+    enabled: true
+    target_min: -1.0
+  reward_shaping:
+    enabled: true
+    overlong_buffer_length: 128
+    overlong_buffer_penalty: 1
+    max_response_length: 2048
+    stop_properly_penalty_coef: null
+
+loss_fn:
+  reference_policy_kl_penalty: 0.0
+  ratio_clip_min: 0.2
+  ratio_clip_max: 0.28
+  ratio_clip_c: 10
+  use_importance_sampling_correction: false
+
+checkpointing:
+  enabled: true
+  checkpoint_dir: /ephemeral/nemo-rl/results/dapo_qwen25_math_1p5b_dapo_100_hfverify_g64x16
+  metric_name: val:accuracy
+  higher_is_better: true
+  keep_top_k: 1
+  save_period: 100
+  checkpoint_must_save_by: null
+  model_save_format: safetensors
+  save_consolidated: false
+
+policy:
+  model_name: Qwen/Qwen2.5-Math-1.5B-Instruct
+  tokenizer:
+    name: Qwen/Qwen2.5-Math-1.5B-Instruct
+  precision: bfloat16
+  train_global_batch_size: 1024
+  train_micro_batch_size: 1
+  logprob_batch_size: 1
+  max_total_sequence_length: 2048
+  dtensor_cfg:
+    _v2: true
+    enabled: true
+    cpu_offload: false
+    tensor_parallel_size: 1
+    context_parallel_size: 1
+    sequence_parallel: false
+    activation_checkpointing: true
+  sequence_packing:
+    enabled: false
+  dynamic_batching:
+    enabled: false
+  optimizer:
+    kwargs:
+      lr: 5.0e-7
+      weight_decay: 0.1
+  scheduler:
+  - name: torch.optim.lr_scheduler.LinearLR
+    kwargs:
+      start_factor: 1.0e-8
+      end_factor: 1.0
+      total_iters: 10
+  - name: torch.optim.lr_scheduler.ConstantLR
+    kwargs:
+      factor: 1.0
+      total_iters: 10000000000
+  - milestones:
+    - 10
+  generation:
+    max_new_tokens: 2048
+    temperature: 1.0
+    top_p: 1.0
+    top_k: null
+    vllm_cfg:
+      tensor_parallel_size: 1
+      gpu_memory_utilization: 0.55
+      max_model_len: 2048
+      enforce_eager: true
+
+data:
+  max_input_seq_length: 2048
+  train:
+    dataset_name: DAPOMath17K
+  validation:
+    dataset_name: DAPOMathAIME2024
+  default:
+    prompt_file: null
+    system_prompt_file: null
+    processor: math_hf_data_processor
+    env_name: math
+
+env:
+  math:
+    num_workers: 8
+    math_verify_impl: hf_math_verify
+
+logger:
+  log_dir: /ephemeral/nemo-rl/logs/dapo_qwen25_math_1p5b_dapo_100_hfverify_g64x16
+  num_val_samples_to_print: 0
+  wandb_enabled: false
+  tensorboard_enabled: false
+  mlflow_enabled: false
+  swanlab_enabled: false
+  monitor_gpus: false
+
+cluster:
+  gpus_per_node: 1
+  num_nodes: 1
