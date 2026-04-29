@@ -1,0 +1,31 @@
+# Auto-research variant: reduce sampling entropy and increase OAPL group size.
+#
+# Hypothesis: Qwen2.5-Math-1.5B-Instruct at temperature 1.0 produced almost no
+# verifier-positive samples on DAPO Math. Lowering temperature should preserve
+# exploration while keeping completions coherent enough to produce reward.
+defaults: oapl_qwen25_math_1p5b_dapo_10h.yaml
+
+grpo:
+  num_prompts_per_step: 64
+  num_generations_per_prompt: 16
+  val_period: 10
+  oapl:
+    sync_interval_steps: 10
+
+checkpointing:
+  checkpoint_dir: /ephemeral/nemo-rl/results/oapl_qwen25_math_1p5b_dapo_10h_temp06_g64x16
+
+policy:
+  max_total_sequence_length: 1024
+  generation:
+    max_new_tokens: 1024
+    temperature: 0.6
+    top_p: 0.95
+    vllm_cfg:
+      max_model_len: 1024
+
+data:
+  max_input_seq_length: 1024
+
+logger:
+  log_dir: /ephemeral/nemo-rl/logs/oapl_qwen25_math_1p5b_dapo_10h_temp06_g64x16
