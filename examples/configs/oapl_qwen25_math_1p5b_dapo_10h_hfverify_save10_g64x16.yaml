@@ -1,0 +1,17 @@
+# Auto-research variant: reproduce the best sync10 HF-verifier branch while saving step 10.
+defaults: oapl_qwen25_math_1p5b_dapo_10h_hfverify_g64x16.yaml
+
+checkpointing:
+  checkpoint_dir: /ephemeral/nemo-rl/results/oapl_qwen25_math_1p5b_dapo_10h_hfverify_save10_g64x16
+  save_period: 10
+  checkpoint_must_save_by: null
+  training_timeout: 8h
+
+logger:
+  log_dir: /ephemeral/nemo-rl/logs/oapl_qwen25_math_1p5b_dapo_10h_hfverify_save10_g64x16
+  wandb:
+    name: oapl-qwen25-math-1p5b-dapo-10h-hfverify-save10-g64x16
+  tensorboard:
+    log_dir: /ephemeral/nemo-rl/tensorboard/oapl_qwen25_math_1p5b_dapo_10h_hfverify_save10_g64x16
+  mlflow:
+    run_name: oapl-qwen25-math-1p5b-dapo-10h-hfverify-save10-g64x16
