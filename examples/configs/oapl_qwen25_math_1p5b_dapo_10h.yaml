@@ -1,0 +1,125 @@
+# 10-hour OAPL research recipe on a supported high-signal math model.
+#
+# This intentionally uses Qwen2.5-Math-1.5B-Instruct rather than Qwen3.5-0.8B:
+# the current pinned Transformers/vLLM stack recognizes qwen2/qwen3 but not
+# qwen3_5, and the 1.5B math model has nonzero AIME-2024 reward before training.
+#
+# Run:
+#   uv run examples/run_grpo.py --config examples/configs/oapl_qwen25_math_1p5b_dapo_10h.yaml
+defaults: grpo_math_1B.yaml
+
+grpo:
+  algorithm: oapl
+  num_prompts_per_step: 128
+  num_generations_per_prompt: 8
+  max_num_steps: 1000000
+  max_num_epochs: 1
+  normalize_rewards: false
+  use_leave_one_out_baseline: false
+  val_period: 10
+  val_at_start: true
+  val_at_end: true
+  max_val_samples: 256
+  val_batch_size: 64
+  use_dynamic_sampling: false
+  skip_reference_policy_logprobs_calculation: true
+  seq_logprob_error_threshold: null
+  oapl:
+    beta_v: 0.5
+    beta_loss: 1.0e-3
+    sync_interval_steps: 10
+    log_ratio_reduction: sum
+
+loss_fn:
+  reference_policy_kl_penalty: 0.0
+  use_importance_sampling_correction: false
+
+checkpointing:
+  enabled: true
+  checkpoint_dir: /ephemeral/nemo-rl/results/oapl_qwen25_math_1p5b_dapo_10h
+  metric_name: val:accuracy
+  higher_is_better: true
+  keep_top_k: 1
+  save_period: 20
+  checkpoint_must_save_by: 2h
+  training_timeout: 10h
+  model_save_format: safetensors
+  save_consolidated: false
+
+policy:
+  model_name: Qwen/Qwen2.5-Math-1.5B-Instruct
+  tokenizer:
+    name: Qwen/Qwen2.5-Math-1.5B-Instruct
+  precision: bfloat16
+  train_global_batch_size: 1024
+  train_micro_batch_size: 1
+  logprob_batch_size: 1
+  max_total_sequence_length: 2048
+  dtensor_cfg:
+    _v2: true
+    enabled: true
+    cpu_offload: true
+    tensor_parallel_size: 1
+    context_parallel_size: 1
+    sequence_parallel: false
+    activation_checkpointing: true
+  sequence_packing:
+    enabled: false
+  dynamic_batching:
+    enabled: false
+  optimizer:
+    kwargs:
+      lr: 5.0e-7
+      weight_decay: 0.1
+  scheduler:
+  - name: torch.optim.lr_scheduler.LinearLR
+    kwargs:
+      start_factor: 1.0e-8
+      end_factor: 1.0
+      total_iters: 10
+  - name: torch.optim.lr_scheduler.ConstantLR
+    kwargs:
+      factor: 1.0
+      total_iters: 10000000000
+  - milestones:
+    - 10
+  generation:
+    max_new_tokens: 2048
+    temperature: 1.0
+    top_p: 1.0
+    top_k: null
+    vllm_cfg:
+      tensor_parallel_size: 1
+      gpu_memory_utilization: 0.55
+      max_model_len: 2048
+      enforce_eager: true
+
+data:
+  max_input_seq_length: 2048
+  train:
+    dataset_name: DAPOMath17K
+  validation:
+    dataset_name: DAPOMathAIME2024
+  default:
+    prompt_file: null
+    system_prompt_file: null
+    processor: math_hf_data_processor
+    env_name: math
+
+env:
+  math:
+    num_workers: 8
+    math_verify_impl: dapo_math_verify
+
+logger:
+  log_dir: /ephemeral/nemo-rl/logs/oapl_qwen25_math_1p5b_dapo_10h
+  num_val_samples_to_print: 0
+  wandb_enabled: false
+  tensorboard_enabled: false
+  mlflow_enabled: false
+  swanlab_enabled: false
+  monitor_gpus: false
+
+cluster:
+  gpus_per_node: 1
+  num_nodes: 1

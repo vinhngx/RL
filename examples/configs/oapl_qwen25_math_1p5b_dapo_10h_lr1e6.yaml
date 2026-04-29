@@ -1,0 +1,14 @@
+# Auto-research variant: same as the 10h base recipe, with a less conservative LR.
+defaults: oapl_qwen25_math_1p5b_dapo_10h.yaml
+
+checkpointing:
+  checkpoint_dir: /ephemeral/nemo-rl/results/oapl_qwen25_math_1p5b_dapo_10h_lr1e6
+
+policy:
+  optimizer:
+    kwargs:
+      lr: 1.0e-6
+      weight_decay: 0.1
+
+logger:
+  log_dir: /ephemeral/nemo-rl/logs/oapl_qwen25_math_1p5b_dapo_10h_lr1e6

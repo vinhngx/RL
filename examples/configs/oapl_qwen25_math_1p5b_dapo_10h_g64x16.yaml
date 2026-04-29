@@ -1,0 +1,13 @@
+# Auto-research variant: same GBS=1024, more generations per prompt.
+# This gives OAPL's prompt-group value estimate more within-prompt samples.
+defaults: oapl_qwen25_math_1p5b_dapo_10h.yaml
+
+grpo:
+  num_prompts_per_step: 64
+  num_generations_per_prompt: 16
+
+checkpointing:
+  checkpoint_dir: /ephemeral/nemo-rl/results/oapl_qwen25_math_1p5b_dapo_10h_g64x16
+
+logger:
+  log_dir: /ephemeral/nemo-rl/logs/oapl_qwen25_math_1p5b_dapo_10h_g64x16

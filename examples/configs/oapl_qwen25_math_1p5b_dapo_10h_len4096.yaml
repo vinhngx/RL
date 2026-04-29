@@ -1,0 +1,20 @@
+# Auto-research variant: longer context for math reasoning.
+# This is slower, so it should only continue if early validation improves.
+defaults: oapl_qwen25_math_1p5b_dapo_10h.yaml
+
+policy:
+  max_total_sequence_length: 4096
+  generation:
+    max_new_tokens: 4096
+    vllm_cfg:
+      max_model_len: 4096
+      gpu_memory_utilization: 0.55
+
+data:
+  max_input_seq_length: 4096
+
+checkpointing:
+  checkpoint_dir: /ephemeral/nemo-rl/results/oapl_qwen25_math_1p5b_dapo_10h_len4096
+
+logger:
+  log_dir: /ephemeral/nemo-rl/logs/oapl_qwen25_math_1p5b_dapo_10h_len4096

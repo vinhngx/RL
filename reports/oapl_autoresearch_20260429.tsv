@@ -1,0 +1,2 @@
+index	branch	commit	recipe	metric	memory_gb	elapsed_min	status	description
+1	autoresearch/2026-04-29-oapl-math/baseline	f0aabd1	examples/configs/evals/eval.yaml	0.100000	3.4	1.4	keep	Base eval: Qwen2.5-Math-1.5B-Instruct, AIME-2024 pass@1 3/30 at temp 0, 2048 tokens.
