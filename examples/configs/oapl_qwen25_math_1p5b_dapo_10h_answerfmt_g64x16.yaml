@@ -1,0 +1,34 @@
+defaults: oapl_qwen25_math_1p5b_dapo_10h.yaml
+
+grpo:
+  num_prompts_per_step: 64
+  num_generations_per_prompt: 16
+  val_period: 10
+  oapl:
+    sync_interval_steps: 10
+
+checkpointing:
+  checkpoint_dir: /ephemeral/nemo-rl/results/oapl_qwen25_math_1p5b_dapo_10h_answerfmt_g64x16
+
+policy:
+  max_total_sequence_length: 1024
+  generation:
+    max_new_tokens: 1024
+    temperature: 0.6
+    top_p: 1.0
+    vllm_cfg:
+      max_model_len: 1024
+
+data:
+  max_input_seq_length: 1024
+  default:
+    system_prompt_file: examples/prompts/dapo_answer_system.txt
+
+logger:
+  log_dir: /ephemeral/nemo-rl/logs/oapl_qwen25_math_1p5b_dapo_10h_answerfmt_g64x16
+  wandb:
+    name: oapl-qwen25-math-1p5b-dapo-10h-answerfmt-g64x16
+  tensorboard:
+    log_dir: /ephemeral/nemo-rl/tensorboard/oapl_qwen25_math_1p5b_dapo_10h_answerfmt_g64x16
+  mlflow:
+    run_name: oapl-qwen25-math-1p5b-dapo-10h-answerfmt-g64x16

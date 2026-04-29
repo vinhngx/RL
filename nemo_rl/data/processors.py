@@ -461,12 +461,18 @@ def math_hf_data_processor(
     formatted_content = (
         task_data_spec.prompt.format(problem) if task_data_spec.prompt else problem
     )
+    messages: list[dict[str, str]] = []
+    if task_data_spec.system_prompt:
+        messages.append({"role": "system", "content": task_data_spec.system_prompt})
+
     user_message = {
         "role": "user",
         "content": formatted_content,
     }
+    messages.append(user_message)
+
     message: list[str] = tokenizer.apply_chat_template(  # type: ignore
-        [user_message],
+        messages,
         tokenize=False,
         add_generation_prompt=True,
         add_special_tokens=False,
