@@ -7,8 +7,8 @@ NeMo RL supports multiple training algorithms for post-training large language m
 | Algorithms | Single Node | Multi-node |
 |------------|-------------|------------|
 | [GRPO](grpo.md) | [GRPO Single Node](grpo.md#grpo-single-node) | [GRPO Multi-node](grpo.md#grpo-multi-node): [GRPO Qwen2.5-32B](grpo.md#grpo-qwen25-32b), [GRPO Multi-Turn](grpo.md#grpo-multi-turn) |
-|DAPO (dapo.md)| similar to GRPO example| similar to GRPO example|
 | [DAPO](dapo.md) | [DAPO Single Node](dapo.md#dapo-single-node) | [DAPO Multi-node](dapo.md#dapo-multi-node) |
+| [OAPL](oapl.md) | [OAPL Single Node](oapl.md#oapl-single-node) | [OAPL Multi-node](oapl.md#oapl-multi-node) |
 | [On-policy Distillation](on-policy-distillation.md) | [Distillation Single Node](on-policy-distillation.md#on-policy-distillation-single-node) | [Distillation Multi-node](on-policy-distillation.md#on-policy-distillation-multi-node) |
 | [Supervised Fine-Tuning (SFT)](sft.md) | [SFT Single Node](sft.md#sft-single-node) | [SFT Multi-node](sft.md#sft-multi-node) |
 | [DPO](dpo.md) | [DPO Single Node](dpo.md#dpo-single-node) | [DPO Multi-node](dpo.md#dpo-multi-node) |
@@ -20,6 +20,7 @@ On-policy distillation is also supported in the PyTorch DTensor path.
 
 grpo
 dapo
+oapl
 on-policy-distillation
 sft
 dpo
