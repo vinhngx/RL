@@ -18,6 +18,7 @@ This module provides different advantage estimation strategies:
 - GRPOAdvantageEstimator: Standard GRPO advantage with leave-one-out baseline
 - GDPOAdvantageEstimator: Multi-reward GDPO (per-component baselines, sum then normalize)
 - ReinforcePlusPlusAdvantageEstimator: Reinforce++ with optional baseline subtraction (minus_baseline) and KL penalty in reward
+- OAPLAdvantageEstimator: Optimal advantage target for off-policy OAPL
 Reference papers:
 - ProRLv2: https://developer.nvidia.com/blog/scaling-llm-reinforcement-learning-with-prolonged-training-using-prorl-v2/
 - Reinforce++: https://arxiv.org/abs/2501.03262
@@ -220,3 +221,60 @@ class ReinforcePlusPlusAdvantageEstimator:
         adv = (adv - adv_mean) * adv_rstd
 
         return adv
+
+
+class OAPLAdvantageEstimator:
+    """OAPL optimal-advantage estimator.
+
+    For each prompt group, estimate
+
+        V*(x) = beta_v * log mean_i exp(r_i / beta_v)
+
+    over valid responses sampled from the generation policy, then use
+    A*(x, y_i) = r_i - V*(x) as the sequence-level regression target.
+    """
+
+    def __init__(self, estimator_config: dict, loss_config: dict):
+        del loss_config
+        self.beta_v = float(estimator_config["beta_v"])
+        if self.beta_v <= 0:
+            raise ValueError(f"OAPL beta_v must be positive, got {self.beta_v}")
+
+    def compute_advantage(self, prompt_ids, rewards, mask, **kwargs):
+        """Compute OAPL optimal advantages.
+
+        Args:
+            prompt_ids: Tensor of shape [batch_size, prompt_len] identifying prompt
+                groups.
+            rewards: Tensor of shape [batch_size].
+            mask: Response token mask of shape [batch_size, seq_len]. Samples with
+                no valid response tokens are excluded from V* estimation.
+
+        Returns:
+            Advantages tensor of shape [batch_size, seq_len].
+        """
+        unique_prompts = torch.unique(prompt_ids, dim=0)
+        advantages = torch.zeros_like(rewards)
+        valid_samples = mask.bool().any(dim=-1)
+
+        for prompt in unique_prompts:
+            is_matching_prompt = (prompt_ids == prompt).all(dim=1)
+            group_valid = is_matching_prompt & valid_samples
+
+            if not group_valid.any():
+                continue
+
+            group_rewards = rewards[group_valid]
+            v_hat = self.beta_v * (
+                torch.logsumexp(group_rewards / self.beta_v, dim=0)
+                - torch.log(
+                    torch.tensor(
+                        group_rewards.numel(),
+                        device=group_rewards.device,
+                        dtype=group_rewards.dtype,
+                    )
+                )
+            )
+            advantages[group_valid] = group_rewards - v_hat
+
+        return advantages.unsqueeze(-1).expand(mask.shape)

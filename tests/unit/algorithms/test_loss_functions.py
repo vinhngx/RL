@@ -23,6 +23,7 @@ from nemo_rl.algorithms.loss import (
     DistillationLossFn,
     DPOLossFn,
     NLLLossFn,
+    OAPLLossFn,
     prepare_loss_input,
 )
 from nemo_rl.algorithms.utils import calculate_kl, masked_mean
@@ -1996,3 +1997,157 @@ def test_distillation_loss_fn_call():
     expected_fields = ["loss"]
     for field in expected_fields:
         assert field in metrics
+
+
+def _setup_oapl_loss_data(
+    advantages: torch.Tensor,
+    generation_logprobs: torch.Tensor | None = None,
+    token_mask: torch.Tensor | None = None,
+    sample_mask: torch.Tensor | None = None,
+    policy_lag_steps: torch.Tensor | None = None,
+) -> BatchedDataDict:
+    batch_size, seq_len = advantages.shape
+    if generation_logprobs is None:
+        generation_logprobs = torch.zeros_like(advantages)
+    if token_mask is None:
+        token_mask = torch.ones_like(advantages)
+        token_mask[:, 0] = 0
+    if sample_mask is None:
+        sample_mask = torch.ones(batch_size, dtype=advantages.dtype)
+
+    data = BatchedDataDict(
+        {
+            "input_ids": torch.zeros(batch_size, seq_len, dtype=torch.long),
+            "advantages": advantages,
+            "generation_logprobs": generation_logprobs,
+            "token_mask": token_mask,
+            "sample_mask": sample_mask,
+        }
+    )
+    if policy_lag_steps is not None:
+        data["policy_lag_steps"] = policy_lag_steps
+    return data
+
+
+def _oapl_valid_counts(data: BatchedDataDict) -> tuple[torch.Tensor, torch.Tensor]:
+    sample_mask = data["sample_mask"]
+    valid_tokens = data["token_mask"][:, 1:] * sample_mask.unsqueeze(-1)
+    return sample_mask.sum(), valid_tokens.sum()
+
+
+def test_oapl_loss_zero_when_regression_target_matches():
+    loss_fn = OAPLLossFn({"beta_loss": 0.5, "log_ratio_reduction": "sum"})
+    advantages = torch.zeros(2, 4)
+    targets = torch.tensor([0.3, -0.6])
+    advantages[:, 1:] = targets.unsqueeze(-1)
+    data = _setup_oapl_loss_data(advantages)
+
+    seq_log_ratio = targets / 0.5
+    next_token_logprobs = seq_log_ratio.unsqueeze(-1).expand(2, 3) / 3
+    global_valid_seqs, global_valid_toks = _oapl_valid_counts(data)
+
+    loss, metrics = loss_fn(
+        next_token_logprobs=next_token_logprobs,
+        data=data,
+        global_valid_seqs=global_valid_seqs,
+        global_valid_toks=global_valid_toks,
+    )
+
+    torch.testing.assert_close(loss, torch.tensor(0.0), atol=1e-7, rtol=0)
+    assert metrics["oapl/residual_mean"] == pytest.approx(0.0, abs=1e-7)
+
+
+def test_oapl_loss_gradient_direction_tracks_advantage_sign():
+    loss_fn = OAPLLossFn({"beta_loss": 1.0, "log_ratio_reduction": "sum"})
+    advantages = torch.zeros(2, 4)
+    advantages[0, 1:] = 1.0
+    advantages[1, 1:] = -1.0
+    token_mask = torch.tensor(
+        [
+            [0.0, 1.0, 0.0, 1.0],
+            [0.0, 1.0, 1.0, 0.0],
+        ]
+    )
+    data = _setup_oapl_loss_data(advantages, token_mask=token_mask)
+    next_token_logprobs = torch.zeros(2, 3, requires_grad=True)
+    global_valid_seqs, global_valid_toks = _oapl_valid_counts(data)
+
+    loss, _ = loss_fn(
+        next_token_logprobs=next_token_logprobs,
+        data=data,
+        global_valid_seqs=global_valid_seqs,
+        global_valid_toks=global_valid_toks,
+    )
+    loss.backward()
+
+    grad = next_token_logprobs.grad
+    assert torch.all(grad[0][token_mask[0, 1:].bool()] < 0)
+    assert torch.all(grad[1][token_mask[1, 1:].bool()] > 0)
+    assert torch.all(grad[token_mask[:, 1:] == 0] == 0)
+
+
+def test_oapl_loss_ignores_padding_prompt_tokens_and_invalid_samples():
+    loss_fn = OAPLLossFn({"beta_loss": 1.0, "log_ratio_reduction": "sum"})
+    advantages = torch.zeros(2, 5)
+    advantages[0, 1:] = 0.25
+    advantages[1, 1:] = 100.0
+    token_mask = torch.tensor(
+        [
+            [0.0, 1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 1.0, 1.0, 1.0],
+        ]
+    )
+    sample_mask = torch.tensor([1.0, 0.0])
+    data = _setup_oapl_loss_data(
+        advantages,
+        token_mask=token_mask,
+        sample_mask=sample_mask,
+    )
+    next_token_logprobs = torch.zeros(2, 4, requires_grad=True)
+    global_valid_seqs, global_valid_toks = _oapl_valid_counts(data)
+
+    loss, _ = loss_fn(
+        next_token_logprobs=next_token_logprobs,
+        data=data,
+        global_valid_seqs=global_valid_seqs,
+        global_valid_toks=global_valid_toks,
+    )
+    loss.backward()
+
+    torch.testing.assert_close(loss, torch.tensor(0.25**2))
+    assert torch.all(next_token_logprobs.grad[0][token_mask[0, 1:] == 0] == 0)
+    assert torch.all(next_token_logprobs.grad[1] == 0)
+
+
+def test_oapl_full_batch_loss_equals_summed_microbatch_loss():
+    loss_fn = OAPLLossFn({"beta_loss": 0.75, "log_ratio_reduction": "sum"})
+    advantages = torch.zeros(4, 4)
+    targets = torch.tensor([0.1, -0.2, 0.3, -0.4])
+    advantages[:, 1:] = targets.unsqueeze(-1)
+    data = _setup_oapl_loss_data(advantages)
+    next_token_logprobs = torch.zeros(4, 3)
+    global_valid_seqs, global_valid_toks = _oapl_valid_counts(data)
+
+    full_loss, _ = loss_fn(
+        next_token_logprobs=next_token_logprobs,
+        data=data,
+        global_valid_seqs=global_valid_seqs,
+        global_valid_toks=global_valid_toks,
+    )
+
+    chunk0 = data.chunk(0, 2)
+    chunk1 = data.chunk(1, 2)
+    loss0, _ = loss_fn(
+        next_token_logprobs=next_token_logprobs[:2],
+        data=chunk0,
+        global_valid_seqs=global_valid_seqs,
+        global_valid_toks=global_valid_toks,
+    )
+    loss1, _ = loss_fn(
+        next_token_logprobs=next_token_logprobs[2:],
+        data=chunk1,
+        global_valid_seqs=global_valid_seqs,
+        global_valid_toks=global_valid_toks,
+    )
+
+    torch.testing.assert_close(full_loss, loss0 + loss1)

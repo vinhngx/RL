@@ -71,6 +71,23 @@ class ClippedPGLossDataDict(TypedDict):
     __extra__: Any
 
 
+class OAPLLossConfig(TypedDict):
+    beta_loss: float
+    log_ratio_reduction: str
+
+
+class OAPLLossDataDict(TypedDict):
+    """Required keys for the OAPL loss function."""
+
+    input_ids: torch.Tensor
+    advantages: torch.Tensor
+    generation_logprobs: torch.Tensor
+    token_mask: torch.Tensor
+    sample_mask: torch.Tensor
+    policy_lag_steps: NotRequired[torch.Tensor]
+    __extra__: Any
+
+
 class ClippedPGLossFn(LossFunction):
     """Generalized Clipped Policy Gradient loss function w/ KL regularization.
 
@@ -566,6 +583,171 @@ class ClippedPGLossFn(LossFunction):
                 "num_valid_samples": sample_mask.sum().item(),
                 "approx_entropy": seq_entropy_approx.item(),
                 **_is_filter_metrics,
+            },
+        )
+
+
+class OAPLLossFn(LossFunction):
+    """Optimal Advantage-based Policy Optimization loss.
+
+    This implements the OAPL squared regression objective:
+
+        (beta * log pi_theta(y|x) / pi_gen(y|x) - A*(x, y))^2
+
+    over response tokens sampled by the generation policy.
+    """
+
+    input_type = LossInputType.LOGPROB
+    loss_type = LossType.SEQUENCE_LEVEL
+
+    def __init__(self, cfg: OAPLLossConfig):
+        self.beta_loss = float(cfg["beta_loss"])
+        self.log_ratio_reduction = cfg["log_ratio_reduction"]
+        if self.beta_loss <= 0:
+            raise ValueError(f"OAPL beta_loss must be positive, got {self.beta_loss}")
+        if self.log_ratio_reduction not in {"sum", "mean"}:
+            raise ValueError(
+                "OAPL log_ratio_reduction must be 'sum' or 'mean', "
+                f"got {self.log_ratio_reduction}"
+            )
+
+    def __call__(
+        self,
+        next_token_logprobs: Tensor,
+        data: BatchedDataDict[OAPLLossDataDict],
+        global_valid_seqs: torch.Tensor,
+        global_valid_toks: torch.Tensor,
+    ) -> tuple[torch.Tensor, dict[str, Any]]:
+        curr_logprobs = next_token_logprobs
+        token_mask = data["token_mask"][:, 1:]
+        sample_mask = data["sample_mask"]
+        generation_logprobs = data["generation_logprobs"][:, 1:]
+        advantages = data["advantages"][:, 1:]
+        mask = token_mask * sample_mask.unsqueeze(-1)
+
+        token_counts = token_mask.sum(dim=-1).clamp(min=1)
+        targets = (advantages * token_mask).sum(dim=-1) / token_counts
+
+        log_ratios = curr_logprobs - generation_logprobs
+        if self.log_ratio_reduction == "sum":
+            seq_log_ratio = (log_ratios * token_mask).sum(dim=-1)
+        else:
+            seq_log_ratio = (log_ratios * token_mask).sum(dim=-1) / token_counts
+
+        residual = self.beta_loss * seq_log_ratio - targets
+        per_seq_loss = residual.pow(2)
+        loss = masked_mean(
+            per_seq_loss,
+            sample_mask,
+            global_normalization_factor=global_valid_seqs,
+        )
+
+        # Keep train-vs-generation diagnostics compatible with the GRPO logging path.
+        lp_error = torch.abs(log_ratios)
+        mult_prob_error = masked_mean(
+            torch.exp(lp_error * mask),
+            mask,
+            global_normalization_factor=global_valid_toks,
+        ).item()
+
+        gen_kl_error = calculate_kl(
+            logprobs=generation_logprobs,
+            logprobs_reference=curr_logprobs.detach(),
+            kl_type="k3",
+            input_clamp_value=None,
+            output_clamp_value=None,
+        )
+        gen_kl_error = masked_mean(
+            gen_kl_error,
+            mask,
+            global_normalization_factor=global_valid_toks,
+        ).item()
+
+        policy_kl_error = calculate_kl(
+            logprobs=curr_logprobs.detach(),
+            logprobs_reference=generation_logprobs,
+            kl_type="k3",
+            input_clamp_value=None,
+            output_clamp_value=None,
+        )
+        policy_kl_error = masked_mean(
+            policy_kl_error,
+            mask,
+            global_normalization_factor=global_valid_toks,
+        ).item()
+
+        log_mixture = torch.log(
+            0.5 * torch.exp(curr_logprobs.detach())
+            + 0.5 * torch.exp(generation_logprobs)
+        )
+        js_divergence_error = masked_mean(
+            0.5
+            * (
+                torch.exp(curr_logprobs.detach() - log_mixture)
+                - (curr_logprobs.detach() - log_mixture)
+                - 1
+            )
+            + 0.5
+            * (
+                torch.exp(generation_logprobs - log_mixture)
+                - (generation_logprobs - log_mixture)
+                - 1
+            ),
+            mask,
+            global_normalization_factor=global_valid_toks,
+        ).item()
+
+        with torch.no_grad():
+            sample_mask_bool = sample_mask.bool()
+            if sample_mask_bool.any():
+                residual_valid = residual[sample_mask_bool]
+                seq_log_ratio_valid = seq_log_ratio[sample_mask_bool]
+                targets_valid = targets[sample_mask_bool]
+                residual_mean = residual_valid.mean().item()
+                residual_std = (
+                    residual_valid.std(unbiased=False).item()
+                    if residual_valid.numel() > 1
+                    else 0.0
+                )
+                seq_log_ratio_mean = seq_log_ratio_valid.mean().item()
+                target_mean = targets_valid.mean().item()
+            else:
+                residual_mean = 0.0
+                residual_std = 0.0
+                seq_log_ratio_mean = 0.0
+                target_mean = 0.0
+
+            seq_entropy_approx = -masked_mean(
+                torch.exp(curr_logprobs.detach() - generation_logprobs)
+                * curr_logprobs.detach(),
+                mask,
+                global_normalization_factor=global_valid_toks,
+            )
+
+            policy_lag_steps = data.get("policy_lag_steps")
+            if policy_lag_steps is None:
+                lag_value = 0.0
+            elif isinstance(policy_lag_steps, torch.Tensor):
+                lag_value = policy_lag_steps.float().mean().item()
+            else:
+                lag_value = float(policy_lag_steps)
+
+        return (
+            loss,
+            {
+                "loss": loss.item(),
+                "oapl/residual_mean": residual_mean,
+                "oapl/residual_std": residual_std,
+                "oapl/seq_log_ratio_mean": seq_log_ratio_mean,
+                "oapl/target_mean": target_mean,
+                "oapl/policy_lag_steps": lag_value,
+                "token_mult_prob_error": mult_prob_error,
+                "gen_kl_error": gen_kl_error,
+                "policy_kl_error": policy_kl_error,
+                "js_divergence_error": js_divergence_error,
+                "sampling_importance_ratio": 1.0,
+                "num_valid_samples": sample_mask.sum().item(),
+                "approx_entropy": seq_entropy_approx.item(),
             },
         )
 

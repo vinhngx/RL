@@ -31,12 +31,14 @@ from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from nemo_rl.algorithms.advantage_estimator import (
     GDPOAdvantageEstimator,
     GRPOAdvantageEstimator,
+    OAPLAdvantageEstimator,
     ReinforcePlusPlusAdvantageEstimator,
 )
 from nemo_rl.algorithms.loss import (
     ClippedPGLossConfig,
     ClippedPGLossDataDict,
     ClippedPGLossFn,
+    OAPLLossFn,
 )
 from nemo_rl.algorithms.loss.interfaces import LossFunction
 from nemo_rl.algorithms.reward_functions import (
@@ -134,7 +136,15 @@ class AdvEstimatorConfig(TypedDict):
     minus_baseline: NotRequired[bool]
 
 
+class OAPLConfig(TypedDict):
+    beta_v: float
+    beta_loss: float
+    sync_interval_steps: int
+    log_ratio_reduction: str
+
+
 class GRPOConfig(TypedDict):
+    algorithm: NotRequired[str]
     num_prompts_per_step: int
     num_generations_per_prompt: int
     max_num_epochs: int
@@ -171,6 +181,7 @@ class GRPOConfig(TypedDict):
     seq_logprob_error_threshold: float | None
     # Advantage estimator configuration (grpo or reinforce_plus_plus)
     adv_estimator: NotRequired[AdvEstimatorConfig]
+    oapl: NotRequired[OAPLConfig]
 
 
 class GRPOSaveState(TypedDict):
@@ -227,7 +238,7 @@ def setup(
     tuple[RayVirtualCluster, RayVirtualCluster],
     StatefulDataLoader | MultipleDataloaderWrapper,
     Optional[StatefulDataLoader],
-    ClippedPGLossFn,
+    LossFunction,
     Logger,
     CheckpointManager,
     GRPOSaveState,
@@ -257,6 +268,7 @@ def setup(
 
     # Set seed for all random number generators
     set_seed(grpo_config["seed"])
+    _validate_oapl_config(master_config)
 
     # ==========================
     #         Logger
@@ -269,8 +281,15 @@ def setup(
     # ==========================
     checkpointer = CheckpointManager(master_config["checkpointing"])
     last_checkpoint_path = checkpointer.get_latest_checkpoint_path()
+    load_full_checkpoint_state = (
+        last_checkpoint_path is not None
+        and master_config["checkpointing"].get("load_optimizer", True)
+    )
     grpo_save_state: Optional[GRPOSaveState] = cast(
-        Optional[GRPOSaveState], checkpointer.load_training_info(last_checkpoint_path)
+        Optional[GRPOSaveState],
+        checkpointer.load_training_info(last_checkpoint_path)
+        if load_full_checkpoint_state
+        else None,
     )
     if grpo_save_state is None:
         grpo_save_state = _default_grpo_save_state()
@@ -314,7 +333,7 @@ def setup(
             drop_last=True,
             num_workers=data_config["num_workers"],
         )
-        if last_checkpoint_path is not None:
+        if load_full_checkpoint_state:
             dataloader_state_dict = torch.load(
                 os.path.join(last_checkpoint_path, f"train_dataloader{suffix}.pt")
             )
@@ -377,7 +396,7 @@ def setup(
     # ==========================
     #        Loss Function
     # ==========================
-    loss_fn = ClippedPGLossFn(loss_config)
+    loss_fn = _create_loss_fn(master_config)
 
     # Validate force_on_policy_ratio
     if loss_config.get("force_on_policy_ratio", False):
@@ -1039,6 +1058,90 @@ def _should_log_nemo_gym_responses(master_config: MasterConfig) -> bool:
     return should_log_nemo_gym_responses
 
 
+def _is_oapl(master_config: MasterConfig) -> bool:
+    return master_config["grpo"].get("algorithm", "grpo") == "oapl"
+
+
+def _get_oapl_config(master_config: MasterConfig) -> OAPLConfig:
+    defaults: OAPLConfig = {
+        "beta_v": 1.0,
+        "beta_loss": 1.0e-3,
+        "sync_interval_steps": 50,
+        "log_ratio_reduction": "sum",
+    }
+    return {**defaults, **master_config["grpo"].get("oapl", {})}
+
+
+def _should_sync_oapl_generation(
+    total_steps: int,
+    generation_sync_step: int,
+    generation_has_synced: bool,
+    sync_interval_steps: int,
+    need_refit: bool,
+    policy_generation_stale: bool,
+) -> bool:
+    if not need_refit or not policy_generation_stale:
+        return False
+    return (
+        not generation_has_synced
+        or total_steps - generation_sync_step >= sync_interval_steps
+    )
+
+
+def _validate_oapl_config(master_config: MasterConfig) -> None:
+    algorithm = master_config["grpo"].get("algorithm", "grpo")
+    if algorithm not in {"grpo", "oapl"}:
+        raise ValueError("grpo.algorithm must be either 'grpo' or 'oapl'")
+    if not _is_oapl(master_config):
+        return
+
+    grpo_config = master_config["grpo"]
+    loss_config = master_config["loss_fn"]
+    oapl_config = _get_oapl_config(master_config)
+
+    if grpo_config.get("use_dynamic_sampling", False):
+        raise ValueError("OAPL v1 does not support grpo.use_dynamic_sampling=True")
+    if loss_config["reference_policy_kl_penalty"] != 0:
+        raise ValueError("OAPL requires loss_fn.reference_policy_kl_penalty=0.0")
+    if loss_config["use_importance_sampling_correction"]:
+        raise ValueError(
+            "OAPL requires loss_fn.use_importance_sampling_correction=false"
+        )
+    if not grpo_config.get("skip_reference_policy_logprobs_calculation", False):
+        raise ValueError(
+            "OAPL requires grpo.skip_reference_policy_logprobs_calculation=true"
+        )
+    if grpo_config["seq_logprob_error_threshold"] is not None:
+        raise ValueError("OAPL requires grpo.seq_logprob_error_threshold=null")
+    if oapl_config["sync_interval_steps"] <= 0:
+        raise ValueError("OAPL sync_interval_steps must be positive")
+    if oapl_config["beta_v"] <= 0:
+        raise ValueError("OAPL beta_v must be positive")
+    if oapl_config["beta_loss"] <= 0:
+        raise ValueError("OAPL beta_loss must be positive")
+    if oapl_config["log_ratio_reduction"] != "sum":
+        raise ValueError("OAPL v1 requires log_ratio_reduction='sum'")
+    val_period = grpo_config["val_period"]
+    if val_period > 0 and val_period % oapl_config["sync_interval_steps"] != 0:
+        raise ValueError(
+            "OAPL validation can only run at sync boundaries. Set "
+            "grpo.val_period to 0 or a multiple of grpo.oapl.sync_interval_steps."
+        )
+
+
+def _create_loss_fn(master_config: MasterConfig) -> LossFunction:
+    if _is_oapl(master_config):
+        oapl_config = _get_oapl_config(master_config)
+        print("  ✓ Using OAPL loss function")
+        return OAPLLossFn(
+            {
+                "beta_loss": oapl_config["beta_loss"],
+                "log_ratio_reduction": oapl_config["log_ratio_reduction"],
+            }
+        )
+    return ClippedPGLossFn(master_config["loss_fn"])
+
+
 def _create_advantage_estimator(master_config: MasterConfig):
     """Create and return an advantage estimator based on configuration.
 
@@ -1053,6 +1156,11 @@ def _create_advantage_estimator(master_config: MasterConfig):
     """
     grpo_config = master_config["grpo"]
     loss_config = master_config["loss_fn"]
+
+    if _is_oapl(master_config):
+        adv_estimator = OAPLAdvantageEstimator(_get_oapl_config(master_config), {})
+        print("  ✓ Using OAPL optimal-advantage estimator")
+        return adv_estimator
 
     # Provide backward-compatible defaults when adv_estimator is not in config.
     # Fall back to top-level grpo.normalize_rewards / grpo.use_leave_one_out_baseline
@@ -1333,6 +1441,9 @@ def grpo_train(
     master_config: MasterConfig,
 ) -> None:
     """Run GRPO training algorithm."""
+    _validate_oapl_config(master_config)
+    is_oapl = _is_oapl(master_config)
+    oapl_config = _get_oapl_config(master_config) if is_oapl else None
     timer = Timer()
     checkpoint_timeout = TimeoutChecker(
         timeout=master_config["checkpointing"]["checkpoint_must_save_by"],
@@ -1389,6 +1500,8 @@ def grpo_train(
     val_at_end = master_config["grpo"]["val_at_end"]
     val_period = master_config["grpo"]["val_period"]
     colocated_inference = master_config["policy"]["generation"]["colocated"]["enabled"]
+    oapl_generation_has_synced = False
+    oapl_generation_sync_step = total_steps
 
     # Initialize advantage estimator
     adv_estimator = _create_advantage_estimator(master_config)
@@ -1402,6 +1515,9 @@ def grpo_train(
         if NEED_REFIT and POLICY_GENERATION_STALE:
             refit_policy_generation(policy, policy_generation, colocated_inference)
             POLICY_GENERATION_STALE = False
+            if is_oapl:
+                oapl_generation_has_synced = True
+                oapl_generation_sync_step = total_steps
         else:
             policy_generation.prepare_for_generation()
         val_metrics, validation_timings = validate(
@@ -1478,7 +1594,25 @@ def grpo_train(
                     flush=True,
                 )
                 with timer.time("prepare_for_generation/total"):
-                    if NEED_REFIT and POLICY_GENERATION_STALE:
+                    should_sync_oapl_generation = (
+                        is_oapl
+                        and _should_sync_oapl_generation(
+                            total_steps=total_steps,
+                            generation_sync_step=oapl_generation_sync_step,
+                            generation_has_synced=oapl_generation_has_synced,
+                            sync_interval_steps=oapl_config[  # type: ignore[index]
+                                "sync_interval_steps"
+                            ],
+                            need_refit=NEED_REFIT,
+                            policy_generation_stale=POLICY_GENERATION_STALE,
+                        )
+                    )
+                    should_refit_generation = (
+                        NEED_REFIT
+                        and POLICY_GENERATION_STALE
+                        and (not is_oapl or should_sync_oapl_generation)
+                    )
+                    if should_refit_generation:
                         # Compute KV scales if needed for FP8 quantization
                         if sync_kv_scales and kv_scales_cache is None:
                             print("▶ Computing KV cache scales...", flush=True)
@@ -1518,10 +1652,16 @@ def grpo_train(
                             kv_scales=kv_scales_cache if sync_kv_scales else None,
                         )
                         POLICY_GENERATION_STALE = False
+                        if is_oapl:
+                            oapl_generation_has_synced = True
+                            oapl_generation_sync_step = total_steps
                     else:
                         if colocated_inference:
                             policy.offload_after_refit()  # unload optimizer to make space for generation
                         policy_generation.prepare_for_generation()
+                    oapl_policy_lag_steps = (
+                        total_steps - oapl_generation_sync_step if is_oapl else 0
+                    )
 
                 dynamic_sampling_num_gen_batches += 1
                 if dynamic_sampling_num_gen_batches == 1 and hasattr(
@@ -1740,6 +1880,12 @@ def grpo_train(
                             "sample_mask": repeated_batch["loss_multiplier"],
                         }
                     )
+                    if is_oapl:
+                        train_data["policy_lag_steps"] = torch.full(
+                            (train_data["input_ids"].shape[0],),
+                            float(oapl_policy_lag_steps),
+                            dtype=torch.float32,
+                        )
                     # this will be mini-batched inside the policy, so maintain the packed multimodal structure
                     # This is also used to populate part of the downstream logprob calculation data
                     extra_multimodal_data = flat_messages.get_multimodal_dict(
@@ -1863,6 +2009,17 @@ def grpo_train(
                     val_at_end and is_last_step
                 ):
                     memory_tracker.snapshot_start_of_stage("Validation", dir())
+                    if is_oapl and not (
+                        (total_steps + 1)
+                        % oapl_config["sync_interval_steps"]  # type: ignore[index]
+                        == 0
+                        or is_last_step
+                    ):
+                        raise RuntimeError(
+                            "OAPL validation attempted away from a sync boundary. "
+                            "Set grpo.val_period to a multiple of "
+                            "grpo.oapl.sync_interval_steps or rely on val_at_end."
+                        )
                     if NEED_REFIT and POLICY_GENERATION_STALE:
                         refit_policy_generation(
                             policy,
@@ -1871,6 +2028,9 @@ def grpo_train(
                             kv_scales=kv_scales_cache if sync_kv_scales else None,
                         )
                         POLICY_GENERATION_STALE = False
+                        if is_oapl:
+                            oapl_generation_has_synced = True
+                            oapl_generation_sync_step = total_steps + 1
                     else:
                         if colocated_inference:
                             policy.offload_after_refit()  # unload optimizer to make space for generation
@@ -2451,12 +2611,18 @@ def async_grpo_train(
         master_config: Master configuration
         max_trajectory_age_steps: Maximum age (in training steps) for trajectories to be used in training
     """
+    _validate_oapl_config(master_config)
+    is_oapl = _is_oapl(master_config)
+    oapl_config = _get_oapl_config(master_config) if is_oapl else None
+
     # Ensure we are running with a compatible async generation backend
     assert _should_use_async_rollouts(master_config), (
         "Async GRPO requires vLLM backend with vllm_cfg.async_engine=True. "
         "Set policy.generation.vllm_cfg.async_engine to true in your config."
     )
-    assert master_config["loss_fn"]["use_importance_sampling_correction"] is True, (
+    assert is_oapl or master_config["loss_fn"][
+        "use_importance_sampling_correction"
+    ] is True, (
         "Importance sampling correction must be enabled for async GRPO for good convergence due to off-policy samples!"
     )
 
@@ -2498,6 +2664,7 @@ def async_grpo_train(
     # Training state
     step = grpo_save_state["current_step"]
     weight_version = step  # Tracks refitted weight versions
+    oapl_generation_sync_step = step
     consumed_samples = grpo_save_state["consumed_samples"]
     total_valid_tokens = grpo_save_state.get(
         "total_valid_tokens", 0
@@ -2554,9 +2721,16 @@ def async_grpo_train(
     # With max_age_steps, we keep trajectories from multiple weight versions
     num_prompts_per_step = master_config["grpo"]["num_prompts_per_step"]
     late_arrival_slack = 2
-    optimal_buffer_size = (
-        num_prompts_per_step * max_trajectory_age_steps * late_arrival_slack
-    )
+    if is_oapl:
+        optimal_buffer_size = (
+            num_prompts_per_step
+            * oapl_config["sync_interval_steps"]  # type: ignore[index]
+            * late_arrival_slack
+        )
+    else:
+        optimal_buffer_size = (
+            num_prompts_per_step * max_trajectory_age_steps * late_arrival_slack
+        )
 
     replay_buffer = ReplayBuffer.options(runtime_env=_replay_runtime_env).remote(
         max_size=optimal_buffer_size
@@ -2611,6 +2785,8 @@ def async_grpo_train(
             refit_policy_generation(policy, policy_generation, colocated_inference)
             print("✅ Policy generation refit completed successfully")
             POLICY_GENERATION_STALE = False
+            if is_oapl:
+                oapl_generation_sync_step = step
         except Exception as e:
             print(f"❌ Policy generation refit failed: {e}")
             import traceback
@@ -2696,6 +2872,8 @@ def async_grpo_train(
                 maybe_gpu_profile_step(policy_generation, step + 1)
 
             with timer.time("total_step_time"):
+                oapl_samples_discarded_on_sync = 0
+                oapl_prompt_groups_discarded_on_sync = 0
                 # Sample trajectories from replay buffer
                 print("📦 Sampling from replay buffer...")
                 with timer.time("exposed_generation"):
@@ -2708,13 +2886,23 @@ def async_grpo_train(
                     num_prompt_groups_needed = master_config["grpo"][
                         "num_prompts_per_step"
                     ]
-                    sample_result = ray.get(
-                        replay_buffer.sample.remote(
-                            num_prompt_groups=num_prompt_groups_needed,
-                            current_weight_version=weight_version,
-                            max_age_steps=max_trajectory_age_steps,
+                    if is_oapl:
+                        sample_result = ray.get(
+                            replay_buffer.sample_oapl.remote(
+                                num_prompt_groups=num_prompt_groups_needed,
+                                active_generation_version=weight_version,
+                                current_training_step=step,
+                                generation_sync_step=oapl_generation_sync_step,
+                            )
                         )
-                    )
+                    else:
+                        sample_result = ray.get(
+                            replay_buffer.sample.remote(
+                                num_prompt_groups=num_prompt_groups_needed,
+                                current_weight_version=weight_version,
+                                max_age_steps=max_trajectory_age_steps,
+                            )
+                        )
 
                     if (
                         sample_result is None
@@ -2843,6 +3031,12 @@ def async_grpo_train(
                             "sample_mask": repeated_batch["loss_multiplier"],
                         }
                     )
+                    if is_oapl:
+                        train_data["policy_lag_steps"] = torch.full(
+                            (train_data["input_ids"].shape[0],),
+                            float(step - oapl_generation_sync_step),
+                            dtype=torch.float32,
+                        )
                     train_data.to("cpu")
 
                 # Training phase (same as sync version)
@@ -2856,12 +3050,15 @@ def async_grpo_train(
                         train_data,
                         timer=timer,
                     )["logprobs"]
-                    reference_logprobs = policy.get_reference_policy_logprobs(
-                        train_data,
-                        timer=timer,
-                    )["reference_logprobs"]
                     train_data["prev_logprobs"] = fprop_logprobs
-                    train_data["reference_policy_logprobs"] = reference_logprobs
+                    if not master_config["grpo"].get(
+                        "skip_reference_policy_logprobs_calculation"
+                    ):
+                        reference_logprobs = policy.get_reference_policy_logprobs(
+                            train_data,
+                            timer=timer,
+                        )["reference_logprobs"]
+                        train_data["reference_policy_logprobs"] = reference_logprobs
 
                     (
                         max_seq_mult_prob_error,
@@ -2916,9 +3113,14 @@ def async_grpo_train(
                         timer=timer,
                     )
 
-                print("🔄 Synchronizing policy weights to trajectory collector…")
                 generation_logger_metrics = None
-                if NEED_REFIT:
+                should_sync_after_step = (not is_oapl) or (
+                    (step + 1)
+                    % oapl_config["sync_interval_steps"]  # type: ignore[index]
+                    == 0
+                )
+                if NEED_REFIT and should_sync_after_step:
+                    print("🔄 Synchronizing policy weights to trajectory collector…")
                     # Measure pending-generation wait as exposed_generation time
                     print("🔄 Coordinating with trajectory collector before refit...")
                     with timer.time("exposed_generation"):
@@ -2941,11 +3143,21 @@ def async_grpo_train(
 
                         # Update weight version before resuming trajectory collection so that all trajectories are updated with the new correct weight version
                         weight_version += 1
+                        if is_oapl:
+                            oapl_generation_sync_step = step + 1
+                            oapl_prompt_groups_discarded_on_sync = ray.get(
+                                replay_buffer.size.remote()
+                            )
+                            oapl_samples_discarded_on_sync = (
+                                oapl_prompt_groups_discarded_on_sync
+                                * samples_per_prompt_group
+                            )
+                            ray.get(replay_buffer.clear.remote())
                         trajectory_collector.set_weight_version.remote(weight_version)
                         trajectory_collector.resume_after_refit.remote()
 
                 # Clear logger metrics after each refit (weight sync), starting a new logging cycle
-                if policy_generation is not None:
+                if policy_generation is not None and should_sync_after_step:
                     policy_generation.clear_logger_metrics()
 
                 # Validation
@@ -2956,6 +3168,15 @@ def async_grpo_train(
                 if (val_period > 0 and (step + 1) % val_period == 0) or (
                     val_at_end and is_last_step
                 ):
+                    if is_oapl and not (
+                        (step + 1)
+                        % oapl_config["sync_interval_steps"]  # type: ignore[index]
+                        == 0
+                        or is_last_step
+                    ):
+                        raise RuntimeError(
+                            "OAPL validation attempted away from a sync boundary."
+                        )
                     # Pause trajectory collection during validation to reduce memory pressure
                     trajectory_collector.pause.remote()
 
@@ -2964,6 +3185,20 @@ def async_grpo_train(
                             policy, policy_generation, colocated_inference
                         )
                         POLICY_GENERATION_STALE = False
+                        if is_oapl:
+                            oapl_generation_sync_step = step + 1
+                            weight_version += 1
+                            oapl_prompt_groups_discarded_on_sync = ray.get(
+                                replay_buffer.size.remote()
+                            )
+                            oapl_samples_discarded_on_sync = (
+                                oapl_prompt_groups_discarded_on_sync
+                                * samples_per_prompt_group
+                            )
+                            ray.get(replay_buffer.clear.remote())
+                            trajectory_collector.set_weight_version.remote(
+                                weight_version
+                            )
                     else:
                         policy_generation.prepare_for_generation()
                     val_metrics, validation_timings = validate(
@@ -3172,6 +3407,14 @@ def async_grpo_train(
             buffer_size_current = ray.get(replay_buffer.size.remote())
             metrics["buffer_size"] = buffer_size_current
             metrics["avg_trajectory_age"] = avg_trajectory_age
+            if is_oapl:
+                metrics["oapl/buffer_generation_version"] = weight_version
+                metrics["oapl/samples_discarded_on_sync"] = (
+                    oapl_samples_discarded_on_sync
+                )
+                metrics["oapl/prompt_groups_discarded_on_sync"] = (
+                    oapl_prompt_groups_discarded_on_sync
+                )
 
             if master_config["policy"]["generation"].get("vllm_cfg", {}).get(
                 "enable_vllm_metrics_logger", False

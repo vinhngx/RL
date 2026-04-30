@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from copy import deepcopy
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,17 +23,22 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 from nemo_rl.algorithms.advantage_estimator import (
     GDPOAdvantageEstimator,
     GRPOAdvantageEstimator,
+    OAPLAdvantageEstimator,
     ReinforcePlusPlusAdvantageEstimator,
 )
 from nemo_rl.algorithms.grpo import (
+    _create_advantage_estimator,
+    _create_loss_fn,
     _default_grpo_save_state,
+    _should_sync_oapl_generation,
+    _validate_oapl_config,
     async_grpo_train,
     compute_and_apply_seq_logprob_error_masking,
     dynamic_sampling,
     grpo_train,
     validate,
 )
-from nemo_rl.algorithms.loss import ClippedPGLossFn
+from nemo_rl.algorithms.loss import ClippedPGLossFn, OAPLLossFn
 from nemo_rl.data.interfaces import DatumSpec, LLMMessageLogType
 from nemo_rl.distributed.batched_data_dict import BatchedDataDict
 from nemo_rl.environments.interfaces import (
@@ -90,6 +96,35 @@ class StubReplayBuffer:
         mock = MagicMock()
         mock.remote = MagicMock(
             side_effect=lambda *args, **kwargs: _sample(*args, **kwargs)
+        )
+        return mock
+
+    @property
+    def sample_oapl(self):
+        """Return a mock that returns an OAPL sample result when .remote() is called"""
+
+        def _sample_oapl(
+            num_prompt_groups,
+            active_generation_version,
+            current_training_step,
+            generation_sync_step,
+        ):
+            del active_generation_version
+            trajectories = [
+                {
+                    "batch": self._mock_batch,
+                    "rollout_metrics": self._mock_rollout_metrics,
+                }
+                for _ in range(num_prompt_groups)
+            ]
+            return {
+                "trajectories": trajectories,
+                "avg_trajectory_age": current_training_step - generation_sync_step,
+            }
+
+        mock = MagicMock()
+        mock.remote = MagicMock(
+            side_effect=lambda *args, **kwargs: _sample_oapl(*args, **kwargs)
         )
         return mock
 
@@ -309,11 +344,15 @@ def mock_envs():
 
 
 @pytest.fixture(autouse=True)
-def reset_env_calls(mock_env, mock_envs):
+def reset_env_calls(request):
     """Reset call counters before each test."""
-    ray.get(mock_env.reset_calls.remote())
-    ray.get(mock_envs["math"].reset_calls.remote())
-    ray.get(mock_envs["code"].reset_calls.remote())
+    if "mock_env" in request.fixturenames:
+        mock_env = request.getfixturevalue("mock_env")
+        ray.get(mock_env.reset_calls.remote())
+    if "mock_envs" in request.fixturenames:
+        mock_envs = request.getfixturevalue("mock_envs")
+        ray.get(mock_envs["math"].reset_calls.remote())
+        ray.get(mock_envs["code"].reset_calls.remote())
     yield
 
 
@@ -708,6 +747,156 @@ def test_dapo_dynamic_sampling_disabled():
     assert result_batch.size == 6
     assert is_batch_complete == True
     assert batch_cache is None  # No caching when disabled
+
+
+def test_oapl_advantage_estimator_matches_grouped_logmeanexp():
+    estimator = OAPLAdvantageEstimator({"beta_v": 1.0}, {})
+    prompt_ids = torch.tensor(
+        [
+            [1, 1],
+            [1, 1],
+            [2, 2],
+            [2, 2],
+        ]
+    )
+    rewards = torch.tensor([0.0, 1.0, 2.0, 4.0])
+    mask = torch.tensor(
+        [
+            [0.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 1.0, 1.0],
+        ]
+    )
+
+    advantages = estimator.compute_advantage(prompt_ids, rewards, mask)
+    v_prompt_1 = torch.logsumexp(rewards[:2], dim=0) - torch.log(torch.tensor(2.0))
+    expected = torch.tensor([0.0 - v_prompt_1, 1.0 - v_prompt_1, 0.0, 0.0])
+
+    torch.testing.assert_close(advantages[:, 1], expected)
+    torch.testing.assert_close(advantages[:, 2], expected)
+
+
+def test_oapl_advantage_equal_rewards_are_zero():
+    estimator = OAPLAdvantageEstimator({"beta_v": 0.5}, {})
+    prompt_ids = torch.tensor([[7, 7], [7, 7], [7, 7]])
+    rewards = torch.tensor([2.0, 2.0, 2.0])
+    mask = torch.ones(3, 4)
+
+    advantages = estimator.compute_advantage(prompt_ids, rewards, mask)
+
+    torch.testing.assert_close(advantages, torch.zeros_like(advantages))
+
+
+def test_oapl_advantage_extreme_beta_regimes_are_finite():
+    prompt_ids = torch.tensor([[1, 2], [1, 2]])
+    rewards = torch.tensor([1000.0, -1000.0])
+    mask = torch.ones(2, 3)
+
+    for beta_v in (1.0e-3, 1.0e3):
+        estimator = OAPLAdvantageEstimator({"beta_v": beta_v}, {})
+        advantages = estimator.compute_advantage(prompt_ids, rewards, mask)
+        assert torch.isfinite(advantages).all()
+
+
+def _base_oapl_master_config():
+    return {
+        "grpo": {
+            "algorithm": "oapl",
+            "use_dynamic_sampling": False,
+            "skip_reference_policy_logprobs_calculation": True,
+            "seq_logprob_error_threshold": None,
+            "val_period": 0,
+            "oapl": {
+                "beta_v": 1.0,
+                "beta_loss": 1.0e-3,
+                "sync_interval_steps": 2,
+                "log_ratio_reduction": "sum",
+            },
+        },
+        "loss_fn": {
+            "reference_policy_kl_penalty": 0.0,
+            "use_importance_sampling_correction": False,
+        },
+    }
+
+
+def test_oapl_config_selects_oapl_estimator_and_loss():
+    master_config = _base_oapl_master_config()
+
+    _validate_oapl_config(master_config)
+    assert isinstance(_create_advantage_estimator(master_config), OAPLAdvantageEstimator)
+    assert isinstance(_create_loss_fn(master_config), OAPLLossFn)
+
+
+def test_oapl_partial_config_uses_public_defaults():
+    master_config = _base_oapl_master_config()
+    master_config["grpo"]["oapl"] = {"beta_v": 0.25}
+
+    _validate_oapl_config(master_config)
+    estimator = _create_advantage_estimator(master_config)
+    loss_fn = _create_loss_fn(master_config)
+
+    assert estimator.beta_v == 0.25
+    assert loss_fn.beta_loss == pytest.approx(1.0e-3)
+
+
+@pytest.mark.parametrize(
+    "section,key,value,match",
+    [
+        ("grpo", "use_dynamic_sampling", True, "dynamic"),
+        (
+            "grpo",
+            "skip_reference_policy_logprobs_calculation",
+            False,
+            "skip_reference_policy",
+        ),
+        ("grpo", "seq_logprob_error_threshold", 1.5, "seq_logprob"),
+        ("loss_fn", "reference_policy_kl_penalty", 0.1, "reference_policy"),
+        ("loss_fn", "use_importance_sampling_correction", True, "importance"),
+    ],
+)
+def test_oapl_invalid_configs_raise_clear_errors(section, key, value, match):
+    master_config = deepcopy(_base_oapl_master_config())
+    master_config[section][key] = value
+
+    with pytest.raises(ValueError, match=match):
+        _validate_oapl_config(master_config)
+
+
+def test_oapl_generation_sync_cadence_helper():
+    assert _should_sync_oapl_generation(
+        total_steps=0,
+        generation_sync_step=0,
+        generation_has_synced=False,
+        sync_interval_steps=2,
+        need_refit=True,
+        policy_generation_stale=True,
+    )
+    assert not _should_sync_oapl_generation(
+        total_steps=1,
+        generation_sync_step=0,
+        generation_has_synced=True,
+        sync_interval_steps=2,
+        need_refit=True,
+        policy_generation_stale=True,
+    )
+    assert _should_sync_oapl_generation(
+        total_steps=2,
+        generation_sync_step=0,
+        generation_has_synced=True,
+        sync_interval_steps=2,
+        need_refit=True,
+        policy_generation_stale=True,
+    )
+    assert not _should_sync_oapl_generation(
+        total_steps=2,
+        generation_sync_step=0,
+        generation_has_synced=True,
+        sync_interval_steps=2,
+        need_refit=False,
+        policy_generation_stale=True,
+    )
 
 
 def test_noncolocated_inference_requires_explicit_gpus_per_node_single_node():
