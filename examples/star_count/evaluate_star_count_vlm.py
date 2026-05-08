@@ -20,6 +20,7 @@ from typing import Any
 
 import torch
 from PIL import Image
+from peft import PeftModel
 from tqdm import tqdm
 from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 
@@ -122,6 +123,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         device_map="auto",
         trust_remote_code=True,
     )
+    if args.adapter_path is not None:
+        model = PeftModel.from_pretrained(model, args.adapter_path)
     model.eval()
 
     args.output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -191,6 +194,7 @@ def main() -> None:
         description="Evaluate Qwen3-VL on star_count SFT-format JSONL."
     )
     parser.add_argument("--model", default="Qwen/Qwen3-VL-2B-Instruct")
+    parser.add_argument("--adapter-path", type=Path, default=None)
     parser.add_argument("--data-path", type=Path, required=True)
     parser.add_argument("--output-path", type=Path, required=True)
     parser.add_argument("--metrics-path", type=Path, required=True)
