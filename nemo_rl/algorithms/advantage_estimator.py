@@ -18,10 +18,14 @@ This module provides different advantage estimation strategies:
 - GRPOAdvantageEstimator: Standard GRPO advantage with leave-one-out baseline
 - GDPOAdvantageEstimator: Multi-reward GDPO (per-component baselines, sum then normalize)
 - ReinforcePlusPlusAdvantageEstimator: Reinforce++ with optional baseline subtraction (minus_baseline) and KL penalty in reward
+- OAPLAdvantageEstimator: OAPL optimal advantage using a log-sum-exp value estimate
 Reference papers:
 - ProRLv2: https://developer.nvidia.com/blog/scaling-llm-reinforcement-learning-with-prolonged-training-using-prorl-v2/
 - Reinforce++: https://arxiv.org/abs/2501.03262
+- OAPL: https://arxiv.org/abs/2602.19362
 """
+
+import math
 
 import torch
 
@@ -220,3 +224,62 @@ class ReinforcePlusPlusAdvantageEstimator:
         adv = (adv - adv_mean) * adv_rstd
 
         return adv
+
+
+class OAPLAdvantageEstimator:
+    """OAPL optimal-advantage estimator.
+
+    OAPL estimates the KL-regularized optimal value for each prompt from a group
+    of rollouts sampled by the lagged inference policy:
+
+    `V*(x) = beta1 * log(mean_i exp(r_i / beta1))`.
+
+    The resulting sequence-level target is `r_i - V*(x)`, expanded across the
+    response tokens so the existing training and logging paths can consume it.
+    """
+
+    def __init__(self, estimator_config: dict, loss_config: dict):
+        self.vstar_beta = loss_config["vstar_beta"]
+        if self.vstar_beta <= 0:
+            raise ValueError(
+                f"OAPL vstar_beta must be positive, got {self.vstar_beta}"
+            )
+
+    def compute_advantage(self, prompt_ids, rewards, mask, **kwargs):
+        """Compute OAPL advantages.
+
+        Args:
+            prompt_ids: Tensor of shape [batch_size, prompt_seq_len] identifying
+                which prompt each sample belongs to.
+            rewards: Tensor of shape [batch_size] containing reward for each sample.
+            mask: Response token mask of shape [batch_size, seq_len], 1 for valid
+                response tokens, 0 for padding or masked samples.
+            **kwargs: Additional arguments (unused).
+
+        Returns:
+            Advantages tensor of shape [batch_size, seq_len].
+        """
+        unique_prompts = torch.unique(prompt_ids, dim=0)
+        vstar = torch.zeros_like(rewards)
+        valid_samples = mask.sum(dim=-1) > 0
+        reward_device = rewards.device
+        sample_indices = torch.arange(len(prompt_ids), device=reward_device)
+
+        for prompt in unique_prompts:
+            is_matching_prompt = (prompt_ids == prompt).all(1)
+            prompt_idx = sample_indices[is_matching_prompt]
+            prompt_valid_idx = prompt_idx[valid_samples[prompt_idx]]
+
+            if prompt_valid_idx.numel() == 0:
+                vstar[prompt_idx] = rewards[prompt_idx]
+                continue
+
+            prompt_rewards = rewards[prompt_valid_idx]
+            prompt_vstar = self.vstar_beta * (
+                torch.logsumexp(prompt_rewards / self.vstar_beta, dim=0)
+                - math.log(prompt_valid_idx.numel())
+            )
+            vstar[prompt_idx] = prompt_vstar
+
+        advantages = (rewards - vstar).unsqueeze(-1)
+        return advantages.expand(mask.shape)

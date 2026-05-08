@@ -80,6 +80,7 @@ class DraftCrossEntropyLossFn(LossFunction):
 
 
 class ClippedPGLossConfig(TypedDict):
+    name: NotRequired[str]
     reference_policy_kl_penalty: float
     reference_policy_kl_type: str
     kl_input_clamp_value: float | None
@@ -112,6 +113,12 @@ class ClippedPGLossConfig(TypedDict):
     force_on_policy_ratio: NotRequired[bool]
     # If True, add KL penalty to reward instead of loss (used by Reinforce++)
     use_kl_in_reward: NotRequired[bool]
+    # OAPL fields are ignored by ClippedPGLossFn but live in the shared GRPO
+    # exemplar config so YAML remains the source of defaults.
+    vstar_beta: NotRequired[float]
+    policy_beta: NotRequired[float]
+    length_normalize_log_ratio: NotRequired[bool]
+    sync_interval: NotRequired[int]
 
 
 class ClippedPGLossDataDict(TypedDict):
@@ -125,6 +132,153 @@ class ClippedPGLossDataDict(TypedDict):
     token_mask: torch.Tensor
     sample_mask: torch.Tensor
     __extra__: Any
+
+
+class OAPLLossConfig(ClippedPGLossConfig):
+    """Configuration for Optimal Advantage-Based Policy Optimization.
+
+    Attributes:
+        name: Loss selector. Set to `"oapl"` to enable this loss in GRPO-style
+            training.
+        vstar_beta: Smoothing coefficient used by the OAPL advantage estimator
+            for `V*(x) = beta * logmeanexp(r / beta)`. The paper's math runs
+            use `1.0`.
+        policy_beta: Coefficient multiplying the sequence log-ratio
+            `log pi(y|x) - log pi_vllm(y|x)` in the squared regression loss.
+            The paper's math runs use `1e-3`.
+        length_normalize_log_ratio: Whether to divide the sequence log-ratio by
+            the number of response tokens before applying `policy_beta`.
+        sync_interval: Number of trainer steps between inference-policy syncs
+            when the training loop supports lagged generation policy updates.
+    """
+
+    name: str
+    vstar_beta: float
+    policy_beta: float
+    length_normalize_log_ratio: bool
+    sync_interval: int
+
+class OAPLLossDataDict(ClippedPGLossDataDict):
+    """Required keys for the OAPL loss function."""
+
+
+class OAPLLossFn(LossFunction):
+    """Sequence-level OAPL squared-regression loss.
+
+    OAPL uses rollouts from the lagged inference policy as the behavior
+    distribution. For each sequence, it regresses
+    `policy_beta * log(pi(y|x) / pi_vllm(y|x))` toward the optimal advantage
+    target `r(x, y) - V*(x)`.
+    """
+
+    input_type = LossInputType.LOGPROB
+    loss_type = LossType.SEQUENCE_LEVEL
+
+    def __init__(self, cfg: OAPLLossConfig):
+        self.vstar_beta = cfg["vstar_beta"]
+        self.policy_beta = cfg["policy_beta"]
+        self.length_normalize_log_ratio = cfg["length_normalize_log_ratio"]
+        self.sync_interval = cfg["sync_interval"]
+        if self.vstar_beta <= 0:
+            raise ValueError(f"vstar_beta must be positive, got {self.vstar_beta}")
+        if self.policy_beta <= 0:
+            raise ValueError(f"policy_beta must be positive, got {self.policy_beta}")
+        if self.sync_interval <= 0:
+            raise ValueError(
+                f"sync_interval must be a positive integer, got {self.sync_interval}"
+            )
+
+    def __call__(
+        self,
+        next_token_logprobs: Tensor,
+        data: BatchedDataDict[OAPLLossDataDict],
+        global_valid_seqs: torch.Tensor,
+        global_valid_toks: torch.Tensor,
+    ) -> tuple[torch.Tensor, dict]:
+        """Compute the OAPL loss."""
+        curr_logprobs = next_token_logprobs
+        token_mask = data["token_mask"][:, 1:]
+        sample_mask = data["sample_mask"]
+        generation_logprobs = data["generation_logprobs"][:, 1:]
+        mask = token_mask * sample_mask.unsqueeze(-1)
+
+        log_ratio = torch.nan_to_num(
+            curr_logprobs - generation_logprobs,
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
+        sequence_log_ratio = (log_ratio * mask).sum(dim=-1)
+        token_counts = token_mask.sum(dim=-1).clamp(min=1)
+        if self.length_normalize_log_ratio:
+            sequence_log_ratio = sequence_log_ratio / token_counts
+
+        advantages = data["advantages"]
+        if advantages.ndim == 1:
+            sequence_advantages = advantages
+        else:
+            sequence_advantages = masked_mean(
+                advantages[:, 1:],
+                token_mask,
+                dim=-1,
+            )
+        sequence_advantages = torch.nan_to_num(
+            sequence_advantages,
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
+
+        prediction = self.policy_beta * sequence_log_ratio
+        per_sequence_loss = torch.square(prediction - sequence_advantages)
+        loss = masked_mean(
+            per_sequence_loss,
+            sample_mask,
+            global_normalization_factor=global_valid_seqs,
+        )
+
+        with torch.no_grad():
+            valid = sample_mask.bool()
+            valid_sequence_log_ratio = sequence_log_ratio.detach()[valid]
+            if valid_sequence_log_ratio.numel() > 0:
+                sequence_log_ratio_min = valid_sequence_log_ratio.min().item()
+                sequence_log_ratio_max = valid_sequence_log_ratio.max().item()
+            else:
+                sequence_log_ratio_min = float("inf")
+                sequence_log_ratio_max = float("-inf")
+
+            mean_abs_token_logprob_delta = masked_mean(
+                torch.abs(log_ratio),
+                mask,
+                global_normalization_factor=global_valid_toks,
+            )
+
+        return (
+            loss,
+            {
+                "loss": loss.item(),
+                "oapl_mse": loss.item(),
+                "oapl_prediction_mean": masked_mean(
+                    prediction.detach(),
+                    sample_mask,
+                    global_normalization_factor=global_valid_seqs,
+                ).item(),
+                "oapl_target_mean": masked_mean(
+                    sequence_advantages.detach(),
+                    sample_mask,
+                    global_normalization_factor=global_valid_seqs,
+                ).item(),
+                "oapl_sequence_log_ratio_mean": masked_mean(
+                    sequence_log_ratio.detach(),
+                    sample_mask,
+                    global_normalization_factor=global_valid_seqs,
+                ).item(),
+                "oapl_sequence_log_ratio_min": sequence_log_ratio_min,
+                "oapl_sequence_log_ratio_max": sequence_log_ratio_max,
+                "oapl_mean_abs_token_logprob_delta": mean_abs_token_logprob_delta.item(),
+                "num_valid_samples": sample_mask.sum().item(),
+            },
+        )
 
 
 class ClippedPGLossFn(LossFunction):

@@ -29,12 +29,15 @@ from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from nemo_rl.algorithms.advantage_estimator import (
     GDPOAdvantageEstimator,
     GRPOAdvantageEstimator,
+    OAPLAdvantageEstimator,
     ReinforcePlusPlusAdvantageEstimator,
 )
 from nemo_rl.algorithms.loss import (
     ClippedPGLossConfig,
     ClippedPGLossDataDict,
     ClippedPGLossFn,
+    OAPLLossConfig,
+    OAPLLossFn,
 )
 from nemo_rl.algorithms.loss.interfaces import LossFunction
 from nemo_rl.algorithms.reward_functions import (
@@ -122,9 +125,13 @@ class AsyncGRPOConfig(TypedDict):
 
 
 class AdvEstimatorConfig(TypedDict):
-    """Configuration for advantage estimator (GRPO, GDPO, or Reinforce++)."""
+    """Configuration for advantage estimator.
 
-    name: str  # "grpo", "gdpo", or "reinforce_plus_plus"
+    Supported names are `"grpo"`, `"gdpo"`, `"reinforce_plus_plus"`, and
+    `"oapl"`. OAPL uses `loss_fn.vstar_beta` to estimate the optimal value.
+    """
+
+    name: str
     # GRPO specific
     normalize_rewards: NotRequired[bool]
     use_leave_one_out_baseline: NotRequired[bool]
@@ -199,7 +206,7 @@ class GRPOLoggerConfig(LoggerConfig):
 
 class MasterConfig(TypedDict):
     policy: PolicyConfig
-    loss_fn: ClippedPGLossConfig
+    loss_fn: ClippedPGLossConfig | OAPLLossConfig
     env: dict[str, Any]
     data: DataConfig
     grpo: GRPOConfig
@@ -225,7 +232,7 @@ def setup(
     tuple[RayVirtualCluster, RayVirtualCluster],
     StatefulDataLoader | MultipleDataloaderWrapper,
     Optional[StatefulDataLoader],
-    ClippedPGLossFn,
+    LossFunction,
     Logger,
     CheckpointManager,
     GRPOSaveState,
@@ -375,7 +382,7 @@ def setup(
     # ==========================
     #        Loss Function
     # ==========================
-    loss_fn = ClippedPGLossFn(loss_config)
+    loss_fn = _create_loss_fn(loss_config)
 
     # Validate force_on_policy_ratio
     if loss_config.get("force_on_policy_ratio", False):
@@ -1066,10 +1073,25 @@ def _create_advantage_estimator(master_config: MasterConfig):
             adv_estimator_config, loss_config
         )
         print("  ✓ Using Reinforce++ advantage estimator")
+    elif adv_estimator_name == "oapl":
+        adv_estimator = OAPLAdvantageEstimator(adv_estimator_config, loss_config)
+        print("  ✓ Using OAPL optimal advantage estimator")
     else:
         raise ValueError(f"Invalid adv_estimator name: {adv_estimator_name}")
 
     return adv_estimator
+
+
+def _create_loss_fn(loss_config: ClippedPGLossConfig | OAPLLossConfig) -> LossFunction:
+    """Create the configured policy loss function."""
+    if "name" in loss_config:
+        loss_name = loss_config["name"]
+        if loss_name == "oapl":
+            return OAPLLossFn(loss_config)
+        if loss_name != "clipped_pg":
+            raise ValueError(f"Invalid loss_fn name: {loss_name}")
+
+    return ClippedPGLossFn(loss_config)
 
 
 def _extract_prompt_only_messages(message_logs: list) -> list:
@@ -1805,7 +1827,8 @@ def grpo_train(
                 print("▶ Preparing for training...", flush=True)
                 with timer.time("training_prep"):
                     policy.prepare_for_training()  # set model train and reload optim to GPU
-                    POLICY_GENERATION_STALE = True
+                    if not isinstance(loss_fn, OAPLLossFn):
+                        POLICY_GENERATION_STALE = True
 
                 print("▶ Training policy...", flush=True)
                 with timer.time("policy_training"):
@@ -1814,6 +1837,10 @@ def grpo_train(
                         loss_fn,
                         timer=timer,
                     )
+                    if isinstance(loss_fn, OAPLLossFn):
+                        POLICY_GENERATION_STALE = (
+                            (total_steps + 1) % loss_fn.sync_interval == 0
+                        )
 
                 # Recompute KV scales after policy training if needed
                 if sync_kv_scales:
