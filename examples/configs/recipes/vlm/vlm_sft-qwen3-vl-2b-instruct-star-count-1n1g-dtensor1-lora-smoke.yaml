@@ -2,8 +2,8 @@ defaults: ../../sft_vlm_3B.yaml
 
 sft:
   max_num_epochs: 1
-  max_num_steps: 160
-  val_period: 40
+  max_num_steps: 320
+  val_period: 80
   val_batches: 8
   val_global_batch_size: 8
   val_micro_batch_size: 1
@@ -52,12 +52,12 @@ data:
   add_generation_prompt: false
   train:
     dataset_name: openai_format
-    data_path: /ephemeral/nemo-rl/ubuntu/auto-research/2026-05-08-qwen3vl-star-count-sft/datasets_more_data/train.jsonl
+    data_path: /ephemeral/nemo-rl/ubuntu/auto-research/2026-05-08-qwen3vl-star-count-sft/datasets_more_data_320/train.jsonl
     chat_key: messages
     use_preserving_dataset: true
   validation:
     dataset_name: openai_format
-    data_path: /ephemeral/nemo-rl/ubuntu/auto-research/2026-05-08-qwen3vl-star-count-sft/datasets_more_data/val.jsonl
+    data_path: /ephemeral/nemo-rl/ubuntu/auto-research/2026-05-08-qwen3vl-star-count-sft/datasets_more_data_320/val.jsonl
     chat_key: messages
     use_preserving_dataset: true
   default:
