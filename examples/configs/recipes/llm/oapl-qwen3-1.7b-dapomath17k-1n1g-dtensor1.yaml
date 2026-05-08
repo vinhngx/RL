@@ -31,6 +31,8 @@ policy:
   model_name: Qwen/Qwen3-1.7B
   tokenizer:
     name: Qwen/Qwen3-1.7B
+    chat_template_kwargs:
+      enable_thinking: false
   train_global_batch_size: 16
   train_micro_batch_size: 1
   generation_batch_size: 4
