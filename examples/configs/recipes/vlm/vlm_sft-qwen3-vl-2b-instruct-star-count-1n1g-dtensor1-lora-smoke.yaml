@@ -1,0 +1,76 @@
+defaults: ../../sft_vlm_3B.yaml
+
+sft:
+  max_num_epochs: 1
+  max_num_steps: 80
+  val_period: 20
+  val_batches: 8
+  val_global_batch_size: 8
+  val_micro_batch_size: 1
+  val_at_start: true
+  val_at_end: true
+
+checkpointing:
+  enabled: true
+  checkpoint_dir: /ephemeral/nemo-rl/ubuntu/auto-research/2026-05-08-qwen3vl-star-count-sft/sft-smoke/checkpoints
+  save_period: 20
+  keep_top_k: 1
+
+policy:
+  model_name: Qwen/Qwen3-VL-2B-Instruct
+  tokenizer:
+    name: ${policy.model_name}
+    chat_template: default
+  train_global_batch_size: 8
+  train_micro_batch_size: 1
+  max_total_sequence_length: 1024
+  precision: bfloat16
+  optimizer:
+    kwargs:
+      lr: 1.0e-5
+  dtensor_cfg:
+    tensor_parallel_size: 1
+    activation_checkpointing: true
+    automodel_kwargs:
+      force_hf: true
+    lora_cfg:
+      enabled: true
+      target_modules: []
+      exclude_modules: []
+      match_all_linear: true
+      dim: 16
+      alpha: 32
+      dropout: 0.0
+      dropout_position: post
+      lora_A_init: xavier
+      use_triton: false
+
+data:
+  max_input_seq_length: ${policy.max_total_sequence_length}
+  add_bos: true
+  add_eos: true
+  add_generation_prompt: false
+  train:
+    dataset_name: openai_format
+    data_path: /ephemeral/nemo-rl/ubuntu/auto-research/2026-05-08-qwen3vl-star-count-sft/datasets/train.jsonl
+    chat_key: messages
+  validation:
+    dataset_name: openai_format
+    data_path: /ephemeral/nemo-rl/ubuntu/auto-research/2026-05-08-qwen3vl-star-count-sft/datasets/val.jsonl
+    chat_key: messages
+  default:
+    prompt_file: null
+    system_prompt_file: null
+    processor: sft_processor
+
+logger:
+  log_dir: /ephemeral/nemo-rl/ubuntu/auto-research/2026-05-08-qwen3vl-star-count-sft/sft-smoke/logs
+  wandb_enabled: false
+  tensorboard_enabled: true
+  monitor_gpus: true
+  tensorboard:
+    log_dir: /ephemeral/nemo-rl/ubuntu/auto-research/2026-05-08-qwen3vl-star-count-sft/sft-smoke/tb_logs
+
+cluster:
+  gpus_per_node: 1
+  num_nodes: 1
