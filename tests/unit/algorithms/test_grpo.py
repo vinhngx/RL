@@ -1185,6 +1185,9 @@ def test_grpo_train_collects_generation_logger_metrics(
     mock_grpo_components["policy"].train.return_value["all_mb_metrics"].pop(
         "token_mult_prob_error"
     )
+    mock_grpo_components["policy"].train.return_value["all_mb_metrics"].pop(
+        "gen_kl_error"
+    )
 
     grpo_mod.grpo_train(
         mock_grpo_components["policy"],
