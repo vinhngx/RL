@@ -1182,6 +1182,9 @@ def test_grpo_train_collects_generation_logger_metrics(
     master_config["grpo"]["val_period"] = 0
     master_config["grpo"]["val_at_start"] = False
     master_config["grpo"]["use_dynamic_sampling"] = False
+    mock_grpo_components["policy"].train.return_value["all_mb_metrics"].pop(
+        "token_mult_prob_error"
+    )
 
     grpo_mod.grpo_train(
         mock_grpo_components["policy"],
