@@ -95,7 +95,11 @@ def _load_rows(data_path: Path, limit: int | None) -> list[dict[str, Any]]:
 
 
 def _expected_counts(row: dict[str, Any]) -> dict[str, int]:
-    return json.loads(row["messages"][-1]["content"])
+    content = row["messages"][-1]["content"]
+    if isinstance(content, str):
+        return json.loads(content)
+    text = "".join(item["text"] for item in content if item["type"] == "text")
+    return json.loads(text)
 
 
 def _user_images(row: dict[str, Any]) -> list[Image.Image]:

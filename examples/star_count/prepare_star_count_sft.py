@@ -54,7 +54,12 @@ def _make_sft_row(example: dict[str, Any], image_path: Path) -> dict[str, Any]:
         "messages": [
             {
                 "role": "system",
-                "content": "You are a visual counting assistant. Return only the requested JSON object.",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are a visual counting assistant. Return only the requested JSON object.",
+                    }
+                ],
             },
             {
                 "role": "user",
@@ -65,7 +70,12 @@ def _make_sft_row(example: dict[str, Any], image_path: Path) -> dict[str, Any]:
             },
             {
                 "role": "assistant",
-                "content": json.dumps(example["expected_counts"], sort_keys=True),
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(example["expected_counts"], sort_keys=True),
+                    }
+                ],
             },
         ]
     }
