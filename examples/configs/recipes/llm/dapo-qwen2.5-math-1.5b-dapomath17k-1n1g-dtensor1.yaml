@@ -91,13 +91,13 @@ data:
   validation:
     dataset_name: DAPOMathAIME2024
   default:
-    prompt_file: null
-    system_prompt_file: examples/prompts/dapo_math_qwen3_concise.txt
+    prompt_file: examples/prompts/cot.txt
+    system_prompt_file: null
 
 env:
   math:
     num_workers: 8
-    math_verify_impl: dapo_math_verify
+    math_verify_impl: hf_math_verify
 
 logger:
   log_dir: logs/dapo-qwen2.5-math-1.5b-dapomath17k-1n1g-dtensor1
