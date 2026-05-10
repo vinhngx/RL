@@ -40,6 +40,9 @@ loss_fn:
   sync_interval: 50
 
 grpo:
+  val_period: 50
+  use_dynamic_sampling: false
+  seq_logprob_error_threshold: null
   skip_reference_policy_logprobs_calculation: true
   adv_estimator:
     name: oapl
@@ -49,8 +52,28 @@ grpo:
 
 The OAPL paper reports math experiments with `vstar_beta=1`, `policy_beta=1e-3`, and `sync_interval=50`.
 
+## Compatibility
+
+OAPL validates these settings at startup:
+
+| Setting | Required value |
+|---|---|
+| `loss_fn.name` and `grpo.adv_estimator.name` | both `oapl` |
+| `loss_fn.reference_policy_kl_penalty` | `0.0` |
+| `loss_fn.use_importance_sampling_correction` | `false` |
+| `grpo.skip_reference_policy_logprobs_calculation` | `true` |
+| `grpo.use_dynamic_sampling` | `false` |
+| `grpo.seq_logprob_error_threshold` | `null` |
+| `grpo.val_period` | `0` or a multiple of `loss_fn.sync_interval` |
+
+The validation cadence restriction keeps reported validation metrics aligned with generation-policy sync boundaries.
+
+## Metrics
+
+OAPL logs the scalar loss as `oapl_mse` and reports sequence-regression diagnostics including `oapl/residual_mean`, `oapl/residual_std`, `oapl/seq_log_ratio_mean`, and `oapl/target_mean`. It also emits train-vs-generation diagnostics used for policy-lag debugging: `token_mult_prob_error`, `gen_kl_error`, `policy_kl_error`, `js_divergence_error`, and `approx_entropy`.
+
 ## Notes
 
 - OAPL does not require a reference-policy KL penalty; set `reference_policy_kl_penalty: 0.0` and skip reference logprob calculation.
 - OAPL is sequence-level, so it optimizes the sum of response-token log-ratios by default. Set `length_normalize_log_ratio: true` only when intentionally experimenting with length-normalized variants.
-- Dynamic sampling and reward shaping can still be configured through the existing GRPO/DAPO fields, but the OAPL objective itself does not use PPO clipping or importance-sampling correction.
+- Reward shaping can still be configured through the existing GRPO/DAPO fields, but the OAPL objective itself does not use PPO clipping or importance-sampling correction.

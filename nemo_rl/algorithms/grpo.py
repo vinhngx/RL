@@ -262,6 +262,7 @@ def setup(
 
     # Set seed for all random number generators
     set_seed(grpo_config["seed"])
+    _validate_oapl_config(master_config)
 
     # ==========================
     #         Logger
@@ -1082,6 +1083,52 @@ def _create_advantage_estimator(master_config: MasterConfig):
     return adv_estimator
 
 
+def _validate_oapl_config(master_config: MasterConfig) -> None:
+    """Validate OAPL config combinations that must move together."""
+    grpo_config = master_config["grpo"]
+    loss_config = master_config["loss_fn"]
+    adv_estimator_config = grpo_config.get("adv_estimator", None)
+
+    loss_is_oapl = loss_config.get("name", None) == "oapl"
+    adv_is_oapl = (
+        adv_estimator_config is not None and adv_estimator_config["name"] == "oapl"
+    )
+    if loss_is_oapl != adv_is_oapl:
+        raise ValueError(
+            "OAPL requires both loss_fn.name='oapl' and "
+            "grpo.adv_estimator.name='oapl'."
+        )
+    if not loss_is_oapl:
+        return
+
+    if grpo_config["use_dynamic_sampling"]:
+        raise ValueError("OAPL does not support grpo.use_dynamic_sampling=True")
+    if loss_config["reference_policy_kl_penalty"] != 0:
+        raise ValueError("OAPL requires loss_fn.reference_policy_kl_penalty=0.0")
+    if loss_config["use_importance_sampling_correction"]:
+        raise ValueError("OAPL requires loss_fn.use_importance_sampling_correction=false")
+    if not grpo_config["skip_reference_policy_logprobs_calculation"]:
+        raise ValueError(
+            "OAPL requires grpo.skip_reference_policy_logprobs_calculation=true"
+        )
+    if grpo_config["seq_logprob_error_threshold"] is not None:
+        raise ValueError("OAPL requires grpo.seq_logprob_error_threshold=null")
+
+    if loss_config["vstar_beta"] <= 0:
+        raise ValueError("OAPL vstar_beta must be positive")
+    if loss_config["policy_beta"] <= 0:
+        raise ValueError("OAPL policy_beta must be positive")
+    if loss_config["sync_interval"] <= 0:
+        raise ValueError("OAPL sync_interval must be positive")
+
+    val_period = grpo_config["val_period"]
+    if val_period > 0 and val_period % loss_config["sync_interval"] != 0:
+        raise ValueError(
+            "OAPL validation can only run at sync boundaries. Set grpo.val_period "
+            "to 0 or a multiple of loss_fn.sync_interval."
+        )
+
+
 def _create_loss_fn(loss_config: ClippedPGLossConfig | OAPLLossConfig) -> LossFunction:
     """Create the configured policy loss function."""
     if "name" in loss_config:
@@ -1340,6 +1387,7 @@ def grpo_train(
     master_config: MasterConfig,
 ) -> None:
     """Run GRPO training algorithm."""
+    _validate_oapl_config(master_config)
     timer = Timer()
     timeout = TimeoutChecker(
         timeout=master_config["checkpointing"]["checkpoint_must_save_by"],

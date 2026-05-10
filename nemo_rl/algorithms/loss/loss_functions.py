@@ -158,6 +158,7 @@ class OAPLLossConfig(ClippedPGLossConfig):
     length_normalize_log_ratio: bool
     sync_interval: int
 
+
 class OAPLLossDataDict(ClippedPGLossDataDict):
     """Required keys for the OAPL loss function."""
 
@@ -239,16 +240,87 @@ class OAPLLossFn(LossFunction):
 
         with torch.no_grad():
             valid = sample_mask.bool()
+            valid_residual = (
+                prediction.detach()[valid] - sequence_advantages.detach()[valid]
+            )
+            valid_sequence_advantages = sequence_advantages.detach()[valid]
             valid_sequence_log_ratio = sequence_log_ratio.detach()[valid]
-            if valid_sequence_log_ratio.numel() > 0:
+            if valid_residual.numel() > 0:
+                residual_mean = valid_residual.mean().item()
+                residual_std = (
+                    valid_residual.std(unbiased=False).item()
+                    if valid_residual.numel() > 1
+                    else 0.0
+                )
+                target_mean = valid_sequence_advantages.mean().item()
+                sequence_log_ratio_mean = valid_sequence_log_ratio.mean().item()
                 sequence_log_ratio_min = valid_sequence_log_ratio.min().item()
                 sequence_log_ratio_max = valid_sequence_log_ratio.max().item()
             else:
+                residual_mean = 0.0
+                residual_std = 0.0
+                target_mean = 0.0
+                sequence_log_ratio_mean = 0.0
                 sequence_log_ratio_min = float("inf")
                 sequence_log_ratio_max = float("-inf")
 
             mean_abs_token_logprob_delta = masked_mean(
                 torch.abs(log_ratio),
+                mask,
+                global_normalization_factor=global_valid_toks,
+            )
+            mult_prob_error = masked_mean(
+                torch.exp(torch.abs(log_ratio) * mask),
+                mask,
+                global_normalization_factor=global_valid_toks,
+            )
+            gen_kl_error = calculate_kl(
+                logprobs=generation_logprobs,
+                logprobs_reference=curr_logprobs.detach(),
+                kl_type="k3",
+                input_clamp_value=None,
+                output_clamp_value=None,
+            )
+            gen_kl_error = masked_mean(
+                gen_kl_error,
+                mask,
+                global_normalization_factor=global_valid_toks,
+            )
+            policy_kl_error = calculate_kl(
+                logprobs=curr_logprobs.detach(),
+                logprobs_reference=generation_logprobs,
+                kl_type="k3",
+                input_clamp_value=None,
+                output_clamp_value=None,
+            )
+            policy_kl_error = masked_mean(
+                policy_kl_error,
+                mask,
+                global_normalization_factor=global_valid_toks,
+            )
+            log_mixture = torch.log(
+                0.5 * torch.exp(curr_logprobs.detach())
+                + 0.5 * torch.exp(generation_logprobs)
+            )
+            js_divergence_error = masked_mean(
+                0.5
+                * (
+                    torch.exp(curr_logprobs.detach() - log_mixture)
+                    - (curr_logprobs.detach() - log_mixture)
+                    - 1
+                )
+                + 0.5
+                * (
+                    torch.exp(generation_logprobs - log_mixture)
+                    - (generation_logprobs - log_mixture)
+                    - 1
+                ),
+                mask,
+                global_normalization_factor=global_valid_toks,
+            )
+            seq_entropy_approx = -masked_mean(
+                torch.exp(curr_logprobs.detach() - generation_logprobs)
+                * curr_logprobs.detach(),
                 mask,
                 global_normalization_factor=global_valid_toks,
             )
@@ -258,6 +330,10 @@ class OAPLLossFn(LossFunction):
             {
                 "loss": loss.item(),
                 "oapl_mse": loss.item(),
+                "oapl/residual_mean": residual_mean,
+                "oapl/residual_std": residual_std,
+                "oapl/seq_log_ratio_mean": sequence_log_ratio_mean,
+                "oapl/target_mean": target_mean,
                 "oapl_prediction_mean": masked_mean(
                     prediction.detach(),
                     sample_mask,
@@ -276,6 +352,12 @@ class OAPLLossFn(LossFunction):
                 "oapl_sequence_log_ratio_min": sequence_log_ratio_min,
                 "oapl_sequence_log_ratio_max": sequence_log_ratio_max,
                 "oapl_mean_abs_token_logprob_delta": mean_abs_token_logprob_delta.item(),
+                "token_mult_prob_error": mult_prob_error.item(),
+                "gen_kl_error": gen_kl_error.item(),
+                "policy_kl_error": policy_kl_error.item(),
+                "js_divergence_error": js_divergence_error.item(),
+                "sampling_importance_ratio": 1.0,
+                "approx_entropy": seq_entropy_approx.item(),
                 "num_valid_samples": sample_mask.sum().item(),
             },
         )
