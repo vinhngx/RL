@@ -1,8 +1,8 @@
 defaults: ../../grpo_math_1B.yaml
 
 grpo:
-  num_prompts_per_step: 2
-  num_generations_per_prompt: 8
+  num_prompts_per_step: 32
+  num_generations_per_prompt: 16
   max_num_steps: 600
   max_val_samples: 64
   val_batch_size: 64
@@ -33,9 +33,9 @@ policy:
   model_name: google/gemma-3-1b-it
   tokenizer:
     name: google/gemma-3-1b-it
-  train_global_batch_size: 16
+  train_global_batch_size: 512
   train_micro_batch_size: 1
-  generation_batch_size: 4
+  generation_batch_size: 32
   logprob_batch_size: 1
   max_total_sequence_length: 3072
   logprob_chunk_size: 2048
