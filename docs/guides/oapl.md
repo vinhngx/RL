@@ -52,6 +52,58 @@ grpo:
 
 The OAPL paper reports math experiments with `vstar_beta=1`, `policy_beta=1e-3`, and `sync_interval=50`.
 
+## Length Behavior and DAPO Comparison
+
+OAPL can produce longer responses than DAPO-style recipes, especially on sparse
+math rewards where correctness is rewarded but concision is not. This is not
+only a sampling issue; it follows from the default OAPL objective and the
+guardrails that DAPO commonly enables.
+
+By default, OAPL regresses a sequence-level target against:
+
+```text
+policy_beta * sum_t(log pi(y_t | x, y_<t) - log pi_vllm(y_t | x, y_<t))
+```
+
+Longer responses contain more token positions in this sum, so response length
+becomes part of the optimization surface. When `length_normalize_log_ratio` is
+`false`, a long completion has more room to accumulate trainer-vs-generator
+log-ratio than a short completion. In long-CoT settings this can show up as
+responses drifting toward the generation cap even when the prompt asks for a
+concise answer.
+
+DAPO-style recipes usually add several stabilizers that the OAPL objective does
+not provide by itself:
+
+- clipped token-level policy-gradient updates, including asymmetric/dual
+  clipping;
+- reward scaling, such as mapping binary `0/1` rewards to `-1/1`;
+- overlong reward shaping, which penalizes responses near the configured
+  response-length limit.
+
+The DAPO paper treats token-level loss and overlong reward shaping as important
+long-CoT stability tools. OAPL instead targets off-policy learning from a lagged
+inference policy, and uses that inference policy as the KL anchor rather than
+using PPO/DAPO clipping or importance-sampling correction.
+
+If OAPL responses become too long, consider these controls before interpreting
+the run as an accuracy result:
+
+1. Set `policy.generation.max_new_tokens` to the actual hard response cap you
+   want to test. Reward shaping is applied after generation; it does not stop
+   decoding.
+2. Plot response length together with validation accuracy and truncation rate.
+   Near-cap length can hide reward noise or format degradation.
+3. Try `loss_fn.length_normalize_log_ratio: true` to remove the direct
+   dependence of the OAPL prediction scale on response length. This changes the
+   effective scale of the regression term, so `policy_beta` may need retuning.
+4. If using DAPO-style overlong shaping with OAPL, align
+   `grpo.reward_shaping.max_response_length` with
+   `policy.generation.max_new_tokens`; otherwise the penalty can be much
+   stronger or weaker than intended.
+5. Consider `grpo.overlong_filtering: true` when cap-hit truncated samples are
+   frequent, so those samples do not dominate the loss.
+
 ## Compatibility
 
 OAPL validates these settings at startup:
