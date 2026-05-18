@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import math
 import os
 import time
 import warnings
@@ -1095,8 +1096,7 @@ def _validate_oapl_config(master_config: MasterConfig) -> None:
     )
     if loss_is_oapl != adv_is_oapl:
         raise ValueError(
-            "OAPL requires both loss_fn.name='oapl' and "
-            "grpo.adv_estimator.name='oapl'."
+            "OAPL requires both loss_fn.name='oapl' and grpo.adv_estimator.name='oapl'."
         )
     if not loss_is_oapl:
         return
@@ -1106,7 +1106,9 @@ def _validate_oapl_config(master_config: MasterConfig) -> None:
     if loss_config["reference_policy_kl_penalty"] != 0:
         raise ValueError("OAPL requires loss_fn.reference_policy_kl_penalty=0.0")
     if loss_config["use_importance_sampling_correction"]:
-        raise ValueError("OAPL requires loss_fn.use_importance_sampling_correction=false")
+        raise ValueError(
+            "OAPL requires loss_fn.use_importance_sampling_correction=false"
+        )
     if not grpo_config["skip_reference_policy_logprobs_calculation"]:
         raise ValueError(
             "OAPL requires grpo.skip_reference_policy_logprobs_calculation=true"
@@ -1118,6 +1120,17 @@ def _validate_oapl_config(master_config: MasterConfig) -> None:
         raise ValueError("OAPL vstar_beta must be positive")
     if loss_config["policy_beta"] <= 0:
         raise ValueError("OAPL policy_beta must be positive")
+    if loss_config["length_normalize_log_ratio"] and loss_config[
+        "log_ratio_length_normalization_alpha"
+    ] not in (0.0, 1.0):
+        raise ValueError(
+            "OAPL length_normalize_log_ratio=true is a legacy alias for "
+            "log_ratio_length_normalization_alpha=1.0"
+        )
+    if not math.isfinite(loss_config["log_ratio_length_normalization_alpha"]):
+        raise ValueError("OAPL log_ratio_length_normalization_alpha must be finite")
+    if loss_config["log_ratio_length_normalization_alpha"] < 0:
+        raise ValueError("OAPL log_ratio_length_normalization_alpha must be >= 0")
     if loss_config["sync_interval"] <= 0:
         raise ValueError("OAPL sync_interval must be positive")
 
@@ -1887,8 +1900,8 @@ def grpo_train(
                     )
                     if isinstance(loss_fn, OAPLLossFn):
                         POLICY_GENERATION_STALE = (
-                            (total_steps + 1) % loss_fn.sync_interval == 0
-                        )
+                            total_steps + 1
+                        ) % loss_fn.sync_interval == 0
 
                 # Recompute KV scales after policy training if needed
                 if sync_kv_scales:

@@ -75,6 +75,10 @@ loss_fn:
   # when loss_fn.name="oapl" and grpo.adv_estimator.name="oapl".
   vstar_beta: 1.0
   policy_beta: 1.0e-3
+  # OAPL divides its sequence log-ratio by response_length ** alpha.
+  # 0.0 preserves the original summed sequence log-ratio; 1.0 matches
+  # length_normalize_log_ratio=true.
+  log_ratio_length_normalization_alpha: 0.0
   length_normalize_log_ratio: false
   sync_interval: 50
 

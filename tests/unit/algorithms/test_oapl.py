@@ -9,12 +9,17 @@ from nemo_rl.algorithms.loss.loss_functions import OAPLLossFn
 from nemo_rl.distributed.batched_data_dict import BatchedDataDict
 
 
-def _oapl_loss_config(policy_beta=1.0, length_normalize_log_ratio=False):
+def _oapl_loss_config(
+    policy_beta=1.0,
+    length_normalize_log_ratio=False,
+    log_ratio_length_normalization_alpha=0.0,
+):
     return {
         "name": "oapl",
         "vstar_beta": 1.0,
         "policy_beta": policy_beta,
         "length_normalize_log_ratio": length_normalize_log_ratio,
+        "log_ratio_length_normalization_alpha": log_ratio_length_normalization_alpha,
         "sync_interval": 2,
     }
 
@@ -66,6 +71,7 @@ def _oapl_master_config():
             "vstar_beta": 1.0,
             "policy_beta": 1.0e-3,
             "length_normalize_log_ratio": False,
+            "log_ratio_length_normalization_alpha": 0.0,
             "sync_interval": 2,
         },
     }
@@ -187,6 +193,36 @@ def test_oapl_loss_can_length_normalize_sequence_log_ratio():
     assert torch.allclose(loss, torch.tensor(0.4**2))
 
 
+def test_oapl_loss_can_partially_normalize_sequence_log_ratio_by_length_alpha():
+    cfg = _oapl_loss_config(log_ratio_length_normalization_alpha=0.5)
+    cfg["sync_interval"] = 1
+    loss_fn = OAPLLossFn(cfg)
+    curr_logprobs = torch.tensor([[0.6, 0.2]])
+    generation_logprobs = torch.tensor([[0.0, 0.0, 0.0]])
+    token_mask = torch.tensor([[0.0, 1.0, 1.0]])
+    sample_mask = torch.tensor([1.0])
+    advantages = torch.zeros(1, 3)
+    data = BatchedDataDict(
+        {
+            "generation_logprobs": generation_logprobs,
+            "token_mask": token_mask,
+            "sample_mask": sample_mask,
+            "advantages": advantages,
+        }
+    )
+
+    loss, metrics = loss_fn(
+        curr_logprobs,
+        data,
+        global_valid_seqs=sample_mask.sum(),
+        global_valid_toks=token_mask[:, 1:].sum(),
+    )
+
+    expected_sequence_log_ratio = torch.tensor(0.8 / math.sqrt(2.0))
+    assert torch.allclose(loss, expected_sequence_log_ratio.square())
+    assert metrics["oapl/log_ratio_length_normalization_alpha"] == 0.5
+
+
 def test_oapl_loss_ignores_padding_prompt_tokens_and_invalid_samples():
     loss_fn = OAPLLossFn(_oapl_loss_config())
     advantages = torch.zeros(2, 5)
@@ -270,6 +306,16 @@ def test_oapl_config_validation_requires_matching_loss_and_estimator():
         (("loss_fn", "reference_policy_kl_penalty"), 0.1, "reference_policy"),
         (("loss_fn", "use_importance_sampling_correction"), True, "importance"),
         (
+            ("loss_fn", "log_ratio_length_normalization_alpha"),
+            -1.0,
+            "normalization_alpha",
+        ),
+        (
+            ("loss_fn", "log_ratio_length_normalization_alpha"),
+            float("inf"),
+            "normalization_alpha",
+        ),
+        (
             ("grpo", "skip_reference_policy_logprobs_calculation"),
             False,
             "skip_reference",
@@ -284,4 +330,13 @@ def test_oapl_config_validation_rejects_incompatible_settings(path, value, messa
     config[section][key] = value
 
     with pytest.raises(ValueError, match=message):
+        _validate_oapl_config(config)
+
+
+def test_oapl_config_validation_rejects_legacy_bool_with_fractional_alpha():
+    config = _oapl_master_config()
+    config["loss_fn"]["length_normalize_log_ratio"] = True
+    config["loss_fn"]["log_ratio_length_normalization_alpha"] = 0.5
+
+    with pytest.raises(ValueError, match="legacy alias"):
         _validate_oapl_config(config)

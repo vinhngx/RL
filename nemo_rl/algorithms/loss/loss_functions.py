@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from typing import Any, NotRequired, Optional, TypedDict, TypeVar
 
 import torch
@@ -118,6 +119,7 @@ class ClippedPGLossConfig(TypedDict):
     vstar_beta: NotRequired[float]
     policy_beta: NotRequired[float]
     length_normalize_log_ratio: NotRequired[bool]
+    log_ratio_length_normalization_alpha: NotRequired[float]
     sync_interval: NotRequired[int]
 
 
@@ -147,7 +149,11 @@ class OAPLLossConfig(ClippedPGLossConfig):
             `log pi(y|x) - log pi_vllm(y|x)` in the squared regression loss.
             The paper's math runs use `1e-3`.
         length_normalize_log_ratio: Whether to divide the sequence log-ratio by
-            the number of response tokens before applying `policy_beta`.
+            the number of response tokens before applying `policy_beta`. This
+            is a legacy alias for `log_ratio_length_normalization_alpha=1.0`.
+        log_ratio_length_normalization_alpha: Exponent used to divide the
+            sequence log-ratio by `response_length ** alpha`. Set to `0.0` to
+            use the original summed sequence log-ratio.
         sync_interval: Number of trainer steps between inference-policy syncs
             when the training loop supports lagged generation policy updates.
     """
@@ -156,6 +162,7 @@ class OAPLLossConfig(ClippedPGLossConfig):
     vstar_beta: float
     policy_beta: float
     length_normalize_log_ratio: bool
+    log_ratio_length_normalization_alpha: float
     sync_interval: int
 
 
@@ -179,11 +186,29 @@ class OAPLLossFn(LossFunction):
         self.vstar_beta = cfg["vstar_beta"]
         self.policy_beta = cfg["policy_beta"]
         self.length_normalize_log_ratio = cfg["length_normalize_log_ratio"]
+        self.log_ratio_length_normalization_alpha = cfg[
+            "log_ratio_length_normalization_alpha"
+        ]
         self.sync_interval = cfg["sync_interval"]
         if self.vstar_beta <= 0:
             raise ValueError(f"vstar_beta must be positive, got {self.vstar_beta}")
         if self.policy_beta <= 0:
             raise ValueError(f"policy_beta must be positive, got {self.policy_beta}")
+        if (
+            self.length_normalize_log_ratio
+            and self.log_ratio_length_normalization_alpha not in (0.0, 1.0)
+        ):
+            raise ValueError(
+                "length_normalize_log_ratio=true is a legacy alias for "
+                "log_ratio_length_normalization_alpha=1.0; set "
+                "length_normalize_log_ratio=false when using another alpha"
+            )
+        if self.length_normalize_log_ratio:
+            self.log_ratio_length_normalization_alpha = 1.0
+        if not math.isfinite(self.log_ratio_length_normalization_alpha):
+            raise ValueError("log_ratio_length_normalization_alpha must be finite")
+        if self.log_ratio_length_normalization_alpha < 0:
+            raise ValueError("log_ratio_length_normalization_alpha must be >= 0")
         if self.sync_interval <= 0:
             raise ValueError(
                 f"sync_interval must be a positive integer, got {self.sync_interval}"
@@ -211,8 +236,10 @@ class OAPLLossFn(LossFunction):
         )
         sequence_log_ratio = (log_ratio * mask).sum(dim=-1)
         token_counts = token_mask.sum(dim=-1).clamp(min=1)
-        if self.length_normalize_log_ratio:
-            sequence_log_ratio = sequence_log_ratio / token_counts
+        if self.log_ratio_length_normalization_alpha != 0.0:
+            sequence_log_ratio = sequence_log_ratio / token_counts.pow(
+                self.log_ratio_length_normalization_alpha
+            )
 
         advantages = data["advantages"]
         if advantages.ndim == 1:
@@ -351,6 +378,9 @@ class OAPLLossFn(LossFunction):
                 ).item(),
                 "oapl_sequence_log_ratio_min": sequence_log_ratio_min,
                 "oapl_sequence_log_ratio_max": sequence_log_ratio_max,
+                "oapl/log_ratio_length_normalization_alpha": (
+                    self.log_ratio_length_normalization_alpha
+                ),
                 "oapl_mean_abs_token_logprob_delta": mean_abs_token_logprob_delta.item(),
                 "token_mult_prob_error": mult_prob_error.item(),
                 "gen_kl_error": gen_kl_error.item(),

@@ -36,6 +36,7 @@ loss_fn:
   reference_policy_kl_penalty: 0.0
   vstar_beta: 1.0
   policy_beta: 1.0e-3
+  log_ratio_length_normalization_alpha: 0.0
   length_normalize_log_ratio: false
   sync_interval: 50
 
@@ -48,7 +49,7 @@ grpo:
     name: oapl
 ```
 
-`vstar_beta` is the smoothing coefficient used in the log-sum-exp value estimate. `policy_beta` scales the sequence log-ratio term in the squared loss. `sync_interval` controls how many trainer steps elapse before the generation policy is refit from the trainer in the synchronous GRPO loop.
+`vstar_beta` is the smoothing coefficient used in the log-sum-exp value estimate. `policy_beta` scales the sequence log-ratio term in the squared loss. `log_ratio_length_normalization_alpha` controls whether the sequence log-ratio is divided by `response_length ** alpha` before applying `policy_beta`; `0.0` preserves the original summed sequence log-ratio, while `1.0` fully length-normalizes it. `sync_interval` controls how many trainer steps elapse before the generation policy is refit from the trainer in the synchronous GRPO loop.
 
 The OAPL paper reports math experiments with `vstar_beta=1`, `policy_beta=1e-3`, and `sync_interval=50`.
 
@@ -66,11 +67,20 @@ policy_beta * sum_t(log pi(y_t | x, y_<t) - log pi_vllm(y_t | x, y_<t))
 ```
 
 Longer responses contain more token positions in this sum, so response length
-becomes part of the optimization surface. When `length_normalize_log_ratio` is
-`false`, a long completion has more room to accumulate trainer-vs-generator
-log-ratio than a short completion. In long-CoT settings this can show up as
-responses drifting toward the generation cap even when the prompt asks for a
-concise answer.
+becomes part of the optimization surface. When
+`log_ratio_length_normalization_alpha=0.0`, a long completion has more room to
+accumulate trainer-vs-generator log-ratio than a short completion. In long-CoT
+settings this can show up as responses drifting toward the generation cap even
+when the prompt asks for a concise answer. To control this directly, set
+`loss_fn.log_ratio_length_normalization_alpha` so OAPL uses:
+
+```text
+policy_beta * sum_t(log_ratio_t) / response_length ** alpha
+```
+
+The default `alpha=0.0` preserves the OAPL paper setting. `alpha=1.0` matches
+full length normalization. Fractional values such as `0.5` partially reduce the
+length leverage while keeping some sequence-level scaling.
 
 DAPO-style recipes usually add several stabilizers that the OAPL objective does
 not provide by itself:
@@ -94,9 +104,11 @@ the run as an accuracy result:
    decoding.
 2. Plot response length together with validation accuracy and truncation rate.
    Near-cap length can hide reward noise or format degradation.
-3. Try `loss_fn.length_normalize_log_ratio: true` to remove the direct
-   dependence of the OAPL prediction scale on response length. This changes the
-   effective scale of the regression term, so `policy_beta` may need retuning.
+3. Try a fractional `loss_fn.log_ratio_length_normalization_alpha`, such as
+   `0.5`, to reduce the direct dependence of the OAPL prediction scale on
+   response length without fully switching to per-token averaging. This changes
+   the effective scale of the regression term, so `policy_beta` may need
+   retuning.
 4. If using DAPO-style overlong shaping with OAPL, align
    `grpo.reward_shaping.max_response_length` with
    `policy.generation.max_new_tokens`; otherwise the penalty can be much
@@ -127,5 +139,5 @@ OAPL logs the scalar loss as `oapl_mse` and reports sequence-regression diagnost
 ## Notes
 
 - OAPL does not require a reference-policy KL penalty; set `reference_policy_kl_penalty: 0.0` and skip reference logprob calculation.
-- OAPL is sequence-level, so it optimizes the sum of response-token log-ratios by default. Set `length_normalize_log_ratio: true` only when intentionally experimenting with length-normalized variants.
+- OAPL is sequence-level, so it optimizes the sum of response-token log-ratios by default. Use `log_ratio_length_normalization_alpha` for experiments that divide the sequence log-ratio by `response_length ** alpha`. The legacy `length_normalize_log_ratio: true` option is equivalent to `log_ratio_length_normalization_alpha: 1.0`.
 - Reward shaping can still be configured through the existing GRPO/DAPO fields, but the OAPL objective itself does not use PPO clipping or importance-sampling correction.
