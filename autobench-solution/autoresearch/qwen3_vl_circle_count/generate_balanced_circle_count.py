@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Build deterministic Circle Count examples balanced by exact target count."""
+"""Build deterministic Circle Count examples with exact target-count quotas."""
 
 import argparse
 import importlib.util
@@ -81,20 +81,45 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--examples-per-count", type=int, default=32)
     parser.add_argument("--max-target-count", type=int, default=14)
+    parser.add_argument(
+        "--count-quotas",
+        help="Optional comma-separated COUNT:EXAMPLES quotas (for example 3:32,4:48)",
+    )
+    parser.add_argument(
+        "--color-cycle",
+        help="Optional comma-separated color cycle; repeated names provide weighting",
+    )
     parser.add_argument("--seed-offset", type=int, default=100_000)
     args = parser.parse_args()
 
     generator = load_generator(args.generator)
-    colors = tuple(generator.COLORS)
+    colors = (
+        tuple(args.color_cycle.split(","))
+        if args.color_cycle
+        else tuple(generator.COLORS)
+    )
+    unknown_colors = set(colors) - set(generator.COLORS)
+    if unknown_colors:
+        raise ValueError(f"Unknown colors: {sorted(unknown_colors)}")
+    if args.count_quotas:
+        quotas = []
+        for quota in args.count_quotas.split(","):
+            target_count, examples = (int(value) for value in quota.split(":"))
+            if target_count < 0 or examples <= 0:
+                raise ValueError(f"Invalid count quota: {quota}")
+            quotas.append((target_count, examples))
+    else:
+        quotas = [
+            (target_count, args.examples_per_count)
+            for target_count in range(args.max_target_count + 1)
+        ]
+
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w") as output:
-        for target_count in range(args.max_target_count + 1):
-            for repetition in range(args.examples_per_count):
-                seed = (
-                    args.seed_offset
-                    + target_count * args.examples_per_count
-                    + repetition
-                )
+        example_index = 0
+        for target_count, examples in quotas:
+            for repetition in range(examples):
+                seed = args.seed_offset + example_index
                 example = make_balanced_example(
                     generator,
                     seed=seed,
@@ -102,6 +127,7 @@ def main() -> None:
                     target_color=colors[repetition % len(colors)],
                 )
                 output.write(json.dumps(example, separators=(",", ":")) + "\n")
+                example_index += 1
 
 
 if __name__ == "__main__":
