@@ -44,6 +44,7 @@ code_snapshots*/
 .cache/
 
 # Runtime env
+/.env
 *runtime_env.yaml
 !default_runtime_env.yaml
 

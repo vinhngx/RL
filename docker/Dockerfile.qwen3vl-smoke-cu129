@@ -1,0 +1,13 @@
+FROM nvcr.io/nvidia/nemo-rl:v0.5.0
+
+# NeMo-RL v0.5 builds a 4-D causal attention mask for policy log-prob and
+# training forwards. Qwen3-VL's multimodal RoPE helper expects a 2-D padding
+# mask (or None, in which case it creates the correct all-valid 2-D mask).
+# Patch all multimodal forward sites while retaining the CUDA 12.9 runtime
+# required by Brev hosts with a 565-series NVIDIA driver.
+RUN target=/opt/nemo-rl/nemo_rl/models/policy/workers/megatron_policy_worker.py \
+    && sed -i '/if len(multimodal_data) > 0:/{n;s/position_ids = None/position_ids = None\n                attention_mask = None  # Qwen3-VL requires a 2-D mask or None./;}' "$target" \
+    && test "$(grep -c 'Qwen3-VL requires a 2-D mask or None' "$target")" -eq 2 \
+    && target=/opt/nemo-rl/nemo_rl/models/megatron/common.py \
+    && sed -i '/if len(multimodal_data) > 0:/{n;s/position_ids = None/position_ids = None\n        attention_mask = None  # Qwen3-VL requires a 2-D mask or None./;}' "$target" \
+    && test "$(grep -c 'Qwen3-VL requires a 2-D mask or None' "$target")" -eq 1
