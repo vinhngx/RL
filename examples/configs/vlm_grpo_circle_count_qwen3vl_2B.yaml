@@ -8,7 +8,7 @@ defaults: "grpo_math_1B.yaml"
 
 grpo:
   num_prompts_per_step: 8
-  num_generations_per_prompt: 8
+  num_generations_per_prompt: 16
   val_period: 5
   max_val_samples: 128
   val_batch_size: 32
@@ -19,7 +19,7 @@ checkpointing:
 
 policy:
   model_name: Qwen/Qwen3-VL-2B-Instruct
-  train_global_batch_size: 64
+  train_global_batch_size: 128
   train_micro_batch_size: 1
   logprob_batch_size: 2
   max_total_sequence_length: 2048
