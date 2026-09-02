@@ -1,14 +1,14 @@
 defaults: ../../sft.yaml
 
 sft:
-  max_num_epochs: 4
-  max_num_steps: 64
-  val_period: 8
-  val_batches: 4
+  max_num_epochs: 2
+  max_num_steps: 32
+  val_period: 16
+  val_batches: 1
   val_global_batch_size: 16
   val_micro_batch_size: 1
-  val_at_start: true
-  val_at_end: true
+  val_at_start: false
+  val_at_end: false
   seed: 42
   only_unmask_final: false
 
@@ -58,7 +58,7 @@ policy:
       lr_warmup_iters: 4
       lr_warmup_init: 2.0e-7
       lr_decay_style: cosine
-      lr_decay_iters: 64
+      lr_decay_iters: 32
     distributed_data_parallel_config:
       overlap_grad_reduce: false
       overlap_param_gather: false
