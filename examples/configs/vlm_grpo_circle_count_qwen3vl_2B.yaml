@@ -32,7 +32,7 @@ policy:
       enabled: true
   optimizer:
     kwargs:
-      lr: 2.0e-05
+      lr: 1.0e-04
   generation:
     max_new_tokens: 640
     vllm_cfg:
