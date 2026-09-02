@@ -20,7 +20,7 @@ policy:
   model_name: Qwen/Qwen3-VL-2B-Instruct
   tokenizer:
     name: ${policy.model_name}
-    chat_template: null
+    chat_template: default
     chat_template_kwargs:
       enable_thinking: false
   train_global_batch_size: 8
