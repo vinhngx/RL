@@ -1,0 +1,50 @@
+diff --git a/nemo_rl/algorithms/sft.py b/nemo_rl/algorithms/sft.py
+--- a/nemo_rl/algorithms/sft.py
++++ b/nemo_rl/algorithms/sft.py
+@@ -121,6 +121,13 @@ def setup(
+     # ==========================
+     checkpointer = CheckpointManager(master_config["checkpointing"])
+     last_checkpoint_path = checkpointer.get_latest_checkpoint_path()
+-    sft_save_state: Optional[SFTSaveState] = cast(
+-        Optional[SFTSaveState], checkpointer.load_training_info(last_checkpoint_path)
++    pretrained_weights_path = os.environ.get("NRL_PRETRAINED_WEIGHTS_PATH")
++    if pretrained_weights_path:
++        last_checkpoint_path = None
++    sft_save_state: Optional[SFTSaveState] = (
++        None
++        if pretrained_weights_path
++        else cast(
++            Optional[SFTSaveState], checkpointer.load_training_info(last_checkpoint_path)
++        )
+     )
+@@ -195,11 +202,15 @@ def setup(
+         config=policy_config,
+         tokenizer=tokenizer,
+         processor=processor,
+-        weights_path=Path(last_checkpoint_path) / "policy" / "weights"
+-        if last_checkpoint_path
+-        else None,
++        weights_path=(
++            Path(pretrained_weights_path)
++            if pretrained_weights_path
++            else Path(last_checkpoint_path) / "policy" / "weights"
++            if last_checkpoint_path
++            else None
++        ),
+         optimizer_path=Path(last_checkpoint_path) / "policy" / "optimizer"
+-        if last_checkpoint_path
++        if last_checkpoint_path and not pretrained_weights_path
+         else None,
+         init_optimizer=True,
+         init_reference_model=False,
+diff --git a/nemo_rl/models/policy/workers/megatron_policy_worker.py b/nemo_rl/models/policy/workers/megatron_policy_worker.py
+--- a/nemo_rl/models/policy/workers/megatron_policy_worker.py
++++ b/nemo_rl/models/policy/workers/megatron_policy_worker.py
+@@ -760,6 +760,7 @@ class MegatronPolicyWorker(PolicyWorker):
+             fully_parallel_save=True,
+             fully_parallel_load=True,  # Enable fully parallel load
+             load_rng=False,
++            finetune=weights_path is not None and optimizer_path is None,
+         )
+         ref_checkpoint_config = CheckpointConfig(
+             pretrained_checkpoint=pretrained_path,  # This is the path to the pretrained ckpt for the SFT case

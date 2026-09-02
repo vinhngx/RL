@@ -27,7 +27,10 @@ SFT_DATA_ROOT="${EXP_DIR}/sft-data"
 MEGATRON_ARTIFACT_ROOT="${MEGATRON_ARTIFACT_ROOT:-${CAMPAIGN_ROOT}/model-artifacts/megatron}"
 CONFIG_PATH="${CONFIG_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/sft_v05.yaml}"
 PATCH_PATH="${PATCH_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/vllm_input_image_v05.patch}"
+CONTINUATION_PATCH_PATH="${CONTINUATION_PATCH_PATH:-}"
 SYSTEM_PROMPT_FILE="${SYSTEM_PROMPT_FILE:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/prompt_answer_first.txt}"
+PRETRAINED_CHECKPOINT_PATH="${PRETRAINED_CHECKPOINT_PATH:-}"
+EXTRA_OVERRIDES="${EXTRA_OVERRIDES:-}"
 IMAGE="${IMAGE:-nemo-rl:qwen3vl-smoke-cu129}"
 CONTAINER_NAME="${CONTAINER_NAME:-nemo-rl-qwen3-vl-circle-count-${EXPERIMENT}}"
 WANDB_MODE="${WANDB_MODE:-offline}"
@@ -38,6 +41,14 @@ for required_path in "$DATA_ROOT/train.jsonl" "$DATA_ROOT/validation.jsonl" "$CO
         exit 1
     fi
 done
+if [[ -n "$CONTINUATION_PATCH_PATH" && ! -f "$CONTINUATION_PATCH_PATH" ]]; then
+    echo "Error: continuation patch is missing: $CONTINUATION_PATCH_PATH" >&2
+    exit 1
+fi
+if [[ -n "$PRETRAINED_CHECKPOINT_PATH" && ! -d "$PRETRAINED_CHECKPOINT_PATH" ]]; then
+    echo "Error: pretrained checkpoint is missing: $PRETRAINED_CHECKPOINT_PATH" >&2
+    exit 1
+fi
 
 if [[ -f "$REPO_ROOT/.env" ]]; then
     set -a
@@ -79,6 +90,19 @@ for split in train validation; do
     ' "$DATA_ROOT/$split.jsonl" > "$SFT_DATA_ROOT/$split.jsonl"
 done
 
+checkpoint_mount_args=()
+pretrained_weights_path=""
+if [[ -n "$PRETRAINED_CHECKPOINT_PATH" ]]; then
+    checkpoint_mount_args=(-v "$PRETRAINED_CHECKPOINT_PATH:/trained-checkpoint:ro")
+    pretrained_weights_path="/trained-checkpoint"
+fi
+continuation_patch_mount_args=()
+continuation_patch_command=""
+if [[ -n "$CONTINUATION_PATCH_PATH" ]]; then
+    continuation_patch_mount_args=(-v "$CONTINUATION_PATCH_PATH:/compat/sft_continuation_v05.patch:ro")
+    continuation_patch_command="patch --forward --batch -p1 < /compat/sft_continuation_v05.patch"
+fi
+
 docker run --rm \
     --name "$CONTAINER_NAME" \
     --gpus all \
@@ -90,8 +114,12 @@ docker run --rm \
     -v "$MEGATRON_ARTIFACT_ROOT:/model-artifacts" \
     -v "$CONFIG_PATH:/opt/nemo-rl/examples/configs/recipes/vlm/qwen3_vl_circle_count_sft.yaml:ro" \
     -v "$PATCH_PATH:/compat/qwen3_vl_v05.patch:ro" \
+    "${continuation_patch_mount_args[@]}" \
+    "${checkpoint_mount_args[@]}" \
     -e WANDB_API_KEY \
     -e WANDB_MODE \
+    -e NRL_PRETRAINED_WEIGHTS_PATH="$pretrained_weights_path" \
+    -e EXTRA_OVERRIDES \
     -e HF_HOME=/cache/huggingface \
     -e HF_HUB_CACHE=/cache/huggingface/hub \
     -e HF_DATASETS_CACHE=/cache/huggingface/datasets \
@@ -110,8 +138,10 @@ docker run --rm \
     "$IMAGE" \
     bash -o pipefail -lc "
 patch --forward --batch -p1 < /compat/qwen3_vl_v05.patch
+$continuation_patch_command
 uv run python examples/run_vlm_sft.py \\
     --config examples/configs/recipes/vlm/qwen3_vl_circle_count_sft.yaml \\
     logger.wandb.name=${EXPERIMENT} \\
+    \$EXTRA_OVERRIDES \\
     2>&1 | tee /runstate/logs/run.log
 "
