@@ -10,12 +10,10 @@ the tested learning rates. A leakage-free supervised run was therefore used
 to teach the exact answer format and visual counting task.
 
 The retained 20-step SFT run completed with **0.1350 validation loss** and a
-successfully finalized 4.0 GB weights-only checkpoint. A post-training Gym
-accuracy could not be completed inside the allocation: the weights loaded
-successfully, but Gym's transient policy-model environment hit `ENOSPC` while
-the failed evaluation container retained a 22 GB writable layer. Therefore the
-strongest completed verifier result remains **46.88%**, and this report does
-not infer accuracy from teacher-forced loss.
+successfully finalized 4.0 GB weights-only checkpoint. It scored **59.38%
+validation accuracy (38/64)** and **50.00% on the untouched final split
+(64/128)**. This exceeded the original 31.25% baseline but fell short of the
+90% working target.
 
 ## Experiment Contract
 
@@ -62,8 +60,8 @@ Validation and final labels were never added to the training set.
 | GRPO, LR 1e-5 | 4 steps | 26.56% (17/64) | Discard |
 | GRPO, LR 1e-6 | 16 steps | 31.25% (20/64) | Discard |
 | SFT loss probe | 24 steps | 0.1312 validation loss | Save failed |
-| Supervised fine-tuning | 20 steps, weights only | 0.1350 validation loss | Retained checkpoint |
-| Supervised Gym evaluation | Zero-update | Not completed (`ENOSPC`) | No accuracy claim |
+| Supervised fine-tuning | 20 steps, weights only | 59.38% (38/64) | Keep |
+| Supervised final evaluation | Zero-update, 128 samples | 50.00% (64/128) | Final |
 
 The baseline frequently reasoned for the full generation budget and failed to
 emit a parseable answer: 25 of 64 responses were truncated. Requiring the
@@ -80,12 +78,12 @@ the rate to 1e-6 held 43.75% through step 12 and then fell to 31.25% at step
 
 The retained SFT recovery run reduced its fixed 16-example validation loss
 from 0.2471 at step 10 to 0.1350 at step 20 (45.4%). Checkpoint save exited 0.
-The subsequent evaluation proved that the weights-only checkpoint can be
-loaded into the Megatron policy without optimizer state. Gym failed before
-serving any evaluation examples because its separate transient vLLM service
-ran out of disk while copying its virtual environment. Consequently neither
-validation nor the untouched 128-example final split was consumed for model
-selection after SFT.
+The subsequent evaluator loaded the weights-only checkpoint into the Megatron
+policy without optimizer state. Two attempts initially hit `ENOSPC` because
+Gym copied roughly 22 GB from its uv cache into an isolated child venv. Adding
+hardlink-mode child installs eliminated that duplicate. The completed 64-item
+validation pass scored 59.38%; only then was the untouched 128-item final split
+run once, scoring 50.00%.
 
 ## Retained Supervised Recipe
 
@@ -123,7 +121,9 @@ The campaign adds a narrow compatibility patch for the validated v0.5 image:
 3. Avoid serializing the incompatible distributed optimizer scalar state in
    both GRPO and the older SFT save path; retained checkpoints contain policy
    weights and tokenizer state.
-4. Preserve heterogeneous multimodal JSON messages in the v0.5 SFT loader and
+4. Install Gym child environments with uv hardlinks, avoiding a roughly 22 GB
+   duplicate package copy in each disposable container.
+5. Preserve heterogeneous multimodal JSON messages in the v0.5 SFT loader and
    use the tokenizer's native default Qwen chat template.
 
 ## Reproduction
@@ -147,8 +147,7 @@ bash autobench-solution/autoresearch/qwen3_vl_circle_count/run_sft_v05_docker.sh
 
 The zero-update evaluator loads the saved checkpoint and selects a frozen split
 using the launcher's `PRETRAINED_CHECKPOINT_PATH`, `VALIDATION_SPLIT`, and
-`EXTRA_OVERRIDES` inputs. It should be rerun after reclaiming Docker writable
-layer space; no retraining is required.
+`EXTRA_OVERRIDES` inputs.
 
 ## W&B and Persisted Evidence
 
@@ -176,9 +175,9 @@ runs, the imported base-model artifact, and the retained trained checkpoint.
 - Launcher scripts pass `bash -n`; the Git diff passes `git diff --check`.
 - The 20-step run exited 0 and finalized `step_20` (4.0 GB).
 - Validation loss improved from 0.2471 at step 10 to 0.1350 at step 20.
-- A clean evaluation process loaded the retained checkpoint without optimizer
-  state before Gym's child service hit `ENOSPC`.
-- No post-SFT verifier accuracy is claimed because no evaluation examples ran.
+- The retained checkpoint loaded without optimizer state.
+- The validation evaluator processed 64/64 examples at 59.38% accuracy.
+- The one untouched final evaluator processed 128/128 examples at 50.00%.
 
 ## Limitations
 
