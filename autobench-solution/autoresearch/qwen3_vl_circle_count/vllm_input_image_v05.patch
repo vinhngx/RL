@@ -101,6 +101,21 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
 -                            ),
 +                            optimizer_path=None,
 
+diff --git a/3rdparty/Gym-workspace/Gym/nemo_gym/cli.py b/3rdparty/Gym-workspace/Gym/nemo_gym/cli.py
+--- a/3rdparty/Gym-workspace/Gym/nemo_gym/cli.py
++++ b/3rdparty/Gym-workspace/Gym/nemo_gym/cli.py
+@@ -71,9 +71,9 @@ def _setup_env_command(dir_path: Path, global_config_dict: DictConfig) -> str:
+             f"Found both pyproject.toml and requirements.txt for uv venv setup in server dir: {dir_path}. Please only use one or the other!"
+         )
+     elif has_pyproject_toml:
+-        install_cmd = f"""uv pip install '-e .' {" ".join(head_server_deps)}"""
++        install_cmd = f"""uv pip install --link-mode hardlink '-e .' {" ".join(head_server_deps)}"""
+     elif has_requirements_txt:
+-        install_cmd = f"""uv pip install -r requirements.txt {" ".join(head_server_deps)}"""
++        install_cmd = f"""uv pip install --link-mode hardlink -r requirements.txt {" ".join(head_server_deps)}"""
+     else:
+         raise RuntimeError(f"Missing pyproject.toml or requirements.txt for uv venv setup in server dir: {dir_path}")
+
 diff --git a/nemo_rl/algorithms/sft.py b/nemo_rl/algorithms/sft.py
 --- a/nemo_rl/algorithms/sft.py
 +++ b/nemo_rl/algorithms/sft.py
