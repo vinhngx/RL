@@ -27,6 +27,7 @@ GYM_ROOT="${GYM_ROOT:-${CAMPAIGN_ROOT}/preflight/gym-src}"
 CONFIG_PATH="${CONFIG_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/baseline_v05.yaml}"
 IMAGE="${IMAGE:-nemo-rl:qwen3vl-smoke-cu129}"
 CONTAINER_NAME="${CONTAINER_NAME:-nemo-rl-qwen3-vl-circle-count-${EXPERIMENT}}"
+WANDB_MODE="${WANDB_MODE:-online}"
 
 if [[ ! -d /ephemeral ]]; then
     echo "Error: /ephemeral is unavailable." >&2
@@ -47,7 +48,7 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
     source "$REPO_ROOT/.env"
     set +a
 fi
-if [[ -z "${WANDB_API_KEY:-}" ]]; then
+if [[ "$WANDB_MODE" != "offline" && -z "${WANDB_API_KEY:-}" ]]; then
     echo "Error: WANDB_API_KEY is required in $REPO_ROOT/.env." >&2
     exit 1
 fi
@@ -68,6 +69,7 @@ docker run --rm \
     -v "$GYM_ROOT/resources_servers/circle_count:/opt/nemo-rl/3rdparty/Gym-workspace/Gym/resources_servers/circle_count:ro" \
     -v "$CONFIG_PATH:/opt/nemo-rl/examples/configs/recipes/vlm/qwen3_vl_circle_count.yaml:ro" \
     -e WANDB_API_KEY \
+    -e WANDB_MODE \
     -e HF_HOME=/cache/huggingface \
     -e HF_HUB_CACHE=/cache/huggingface/hub \
     -e HF_DATASETS_CACHE=/cache/huggingface/datasets \
