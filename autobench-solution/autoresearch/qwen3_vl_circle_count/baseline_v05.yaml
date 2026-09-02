@@ -1,0 +1,120 @@
+defaults: ../../../nemo_gym/grpo_workplace_assistant_nemotron_nano_v2_9b.yaml
+
+grpo:
+  num_prompts_per_step: 1
+  num_generations_per_prompt: 2
+  max_rollout_turns: 1
+  max_num_epochs: 1
+  max_num_steps: 0
+  val_period: 0
+  val_at_start: true
+  max_val_samples: null
+  skip_reference_policy_logprobs_calculation: true
+
+loss_fn:
+  reference_policy_kl_penalty: 0.0
+
+checkpointing:
+  enabled: false
+  checkpoint_dir: /runstate/checkpoints
+
+policy:
+  model_name: Qwen/Qwen3-VL-2B-Instruct
+  tokenizer:
+    name: Qwen/Qwen3-VL-2B-Instruct
+    chat_template_kwargs: null
+  train_global_batch_size: 2
+  train_micro_batch_size: 1
+  logprob_batch_size: 1
+  max_total_sequence_length: 2048
+  precision: bfloat16
+  make_sequence_length_divisible_by: 1
+  offload_optimizer_for_logprob: false
+
+  dtensor_cfg:
+    enabled: false
+
+  megatron_cfg:
+    enabled: true
+    activation_checkpointing: false
+    tensor_model_parallel_size: 1
+    pipeline_model_parallel_size: 1
+    context_parallel_size: 1
+    sequence_parallel: false
+    empty_unused_memory_level: 1
+    optimizer:
+      optimizer_cpu_offload: true
+      optimizer_offload_fraction: 1.0
+    distributed_data_parallel_config:
+      overlap_grad_reduce: false
+      overlap_param_gather: false
+
+  dynamic_batching:
+    enabled: false
+
+  sequence_packing:
+    enabled: false
+
+  generation:
+    backend: vllm
+    max_new_tokens: 64
+    temperature: 1.0
+    top_p: 1.0
+    top_k: null
+    vllm_cfg:
+      tensor_parallel_size: 1
+      pipeline_parallel_size: 1
+      gpu_memory_utilization: 0.5
+      max_model_len: 2048
+      enforce_eager: true
+      skip_tokenizer_init: false
+      tool_parser_plugin: null
+      http_server_serving_chat_kwargs:
+        enable_auto_tools: false
+    vllm_kwargs:
+      compilation_config:
+        use_inductor: false
+    colocated:
+      enabled: true
+
+data:
+  train_jsonl_fpath: /runstate/data/train.jsonl
+  validation_jsonl_fpath: /runstate/data/validation.jsonl
+  agent_name: circle_count_simple_agent
+  shuffle: false
+  num_workers: 0
+
+env:
+  should_use_nemo_gym: true
+  should_log_nemo_gym_responses: true
+  nemo_gym:
+    config_paths:
+      - responses_api_models/vllm_model/configs/vllm_model_for_training.yaml
+      - resources_servers/circle_count/configs/circle_count.yaml
+    circle_count_simple_agent:
+      responses_api_agents:
+        simple_agent:
+          max_steps: 1
+    policy_model:
+      responses_api_models:
+        vllm_model:
+          uses_reasoning_parser: false
+          extra_body:
+            chat_template_kwargs:
+              enable_thinking: false
+
+logger:
+  log_dir: /runstate/logs
+  num_val_samples_to_print: 0
+  wandb_enabled: true
+  tensorboard_enabled: false
+  mlflow_enabled: false
+  swanlab_enabled: false
+  monitor_gpus: true
+  wandb:
+    project: qwen3-vl-circle-count-autoresearch
+    name: baseline-oob
+
+cluster:
+  gpus_per_node: 1
+  num_nodes: 1
