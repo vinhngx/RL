@@ -85,6 +85,11 @@ hardlink-mode child installs eliminated that duplicate. The completed 64-item
 validation pass scored 59.38%; only then was the untouched 128-item final split
 run once, scoring 50.00%.
 
+Final accuracy remained strongly count-dependent: 10/10 for count 1, 13/18
+for count 2, and 10/16 for count 3, versus 0/6 for count 8, 0/2 for count 9,
+and 0/3 for count 0. A follow-up should rebalance zero and high-count examples
+rather than spend more budget on answer formatting.
+
 ## Retained Supervised Recipe
 
 The 24-step probe reduced its held-out loss from 0.2038 at step 12 to 0.1312
