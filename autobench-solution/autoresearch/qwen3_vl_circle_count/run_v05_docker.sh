@@ -24,6 +24,7 @@ CAMPAIGN_ROOT="${CAMPAIGN_ROOT:-${BREV_ROOT}/nemo-rl-auto-research/${CAMPAIGN_NA
 EXP_DIR="${EXP_DIR:-${CAMPAIGN_ROOT}/${EXPERIMENT}}"
 DATA_ROOT="${DATA_ROOT:-${CAMPAIGN_ROOT}/data}"
 GYM_ROOT="${GYM_ROOT:-${CAMPAIGN_ROOT}/preflight/gym-src}"
+GYM_RESOURCE_ROOT="${GYM_RESOURCE_ROOT:-${CAMPAIGN_ROOT}/runtime/gym-resources/circle_count}"
 CONFIG_PATH="${CONFIG_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/baseline_v05.yaml}"
 IMAGE="${IMAGE:-nemo-rl:qwen3vl-smoke-cu129}"
 CONTAINER_NAME="${CONTAINER_NAME:-nemo-rl-qwen3-vl-circle-count-${EXPERIMENT}}"
@@ -56,6 +57,10 @@ fi
 mkdir -p \
     "$CACHE_ROOT"/{huggingface,torch,triton,uv,pip,xdg,wandb} \
     "$EXP_DIR"/{logs,checkpoints,artifacts/megatron,ray,tmp,wandb}
+if [[ ! -f "$GYM_RESOURCE_ROOT/app.py" ]]; then
+    mkdir -p "$GYM_RESOURCE_ROOT"
+    cp -a "$GYM_ROOT/resources_servers/circle_count/." "$GYM_RESOURCE_ROOT"
+fi
 
 docker run --rm \
     --name "$CONTAINER_NAME" \
@@ -66,7 +71,7 @@ docker run --rm \
     -v "$CACHE_ROOT:/cache" \
     -v "$EXP_DIR:/runstate" \
     -v "$DATA_ROOT:/runstate/data:ro" \
-    -v "$GYM_ROOT/resources_servers/circle_count:/opt/nemo-rl/3rdparty/Gym-workspace/Gym/resources_servers/circle_count:ro" \
+    -v "$GYM_RESOURCE_ROOT:/opt/nemo-rl/3rdparty/Gym-workspace/Gym/resources_servers/circle_count" \
     -v "$CONFIG_PATH:/opt/nemo-rl/examples/configs/recipes/vlm/qwen3_vl_circle_count.yaml:ro" \
     -e WANDB_API_KEY \
     -e WANDB_MODE \
