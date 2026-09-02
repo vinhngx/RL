@@ -30,6 +30,9 @@ MEGATRON_ARTIFACT_ROOT="${MEGATRON_ARTIFACT_ROOT:-${CAMPAIGN_ROOT}/model-artifac
 CONFIG_PATH="${CONFIG_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/baseline_v05.yaml}"
 VLLM_INPUT_IMAGE_PATCH_PATH="${VLLM_INPUT_IMAGE_PATCH_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/vllm_input_image_v05.patch}"
 SYSTEM_PROMPT_FILE="${SYSTEM_PROMPT_FILE:-}"
+VALIDATION_SPLIT="${VALIDATION_SPLIT:-validation}"
+PRETRAINED_CHECKPOINT_PATH="${PRETRAINED_CHECKPOINT_PATH:-}"
+EXTRA_OVERRIDES="${EXTRA_OVERRIDES:-}"
 IMAGE="${IMAGE:-nemo-rl:qwen3vl-smoke-cu129}"
 CONTAINER_NAME="${CONTAINER_NAME:-nemo-rl-qwen3-vl-circle-count-${EXPERIMENT}}"
 WANDB_MODE="${WANDB_MODE:-online}"
@@ -42,8 +45,8 @@ if [[ ! -d "$GYM_ROOT/resources_servers/circle_count" ]]; then
     echo "Error: pinned Circle Count Gym source is missing at $GYM_ROOT." >&2
     exit 1
 fi
-if [[ ! -f "$DATA_ROOT/train.jsonl" || ! -f "$DATA_ROOT/validation.jsonl" ]]; then
-    echo "Error: train and validation JSONL files are required under $DATA_ROOT." >&2
+if [[ ! -f "$DATA_ROOT/train.jsonl" || ! -f "$DATA_ROOT/$VALIDATION_SPLIT.jsonl" ]]; then
+    echo "Error: train and $VALIDATION_SPLIT JSONL files are required under $DATA_ROOT." >&2
     exit 1
 fi
 if [[ ! -f "$VLLM_INPUT_IMAGE_PATCH_PATH" ]]; then
@@ -52,6 +55,10 @@ if [[ ! -f "$VLLM_INPUT_IMAGE_PATCH_PATH" ]]; then
 fi
 if [[ -n "$SYSTEM_PROMPT_FILE" && ! -f "$SYSTEM_PROMPT_FILE" ]]; then
     echo "Error: system prompt file is missing at $SYSTEM_PROMPT_FILE." >&2
+    exit 1
+fi
+if [[ -n "$PRETRAINED_CHECKPOINT_PATH" && ! -d "$PRETRAINED_CHECKPOINT_PATH" ]]; then
+    echo "Error: pretrained checkpoint directory is missing at $PRETRAINED_CHECKPOINT_PATH." >&2
     exit 1
 fi
 
@@ -80,10 +87,20 @@ if [[ -n "$SYSTEM_PROMPT_FILE" ]]; then
                 "$DATA_ROOT/$split.jsonl" > "$RUN_DATA_ROOT/$split.jsonl"
         fi
     done
+    jq --compact-output --rawfile system_prompt "$SYSTEM_PROMPT_FILE" \
+        '(.responses_create_params.input[] | select(.role == "system") | .content) = ($system_prompt | rtrimstr("\n"))' \
+        "$DATA_ROOT/$VALIDATION_SPLIT.jsonl" > "$RUN_DATA_ROOT/validation.jsonl"
 fi
 if [[ ! -f "$GYM_RESOURCE_ROOT/app.py" ]]; then
     mkdir -p "$GYM_RESOURCE_ROOT"
     cp -a "$GYM_ROOT/resources_servers/circle_count/." "$GYM_RESOURCE_ROOT"
+fi
+
+checkpoint_mount_args=()
+pretrained_override=""
+if [[ -n "$PRETRAINED_CHECKPOINT_PATH" ]]; then
+    checkpoint_mount_args=(-v "$PRETRAINED_CHECKPOINT_PATH:/trained-checkpoint:ro")
+    pretrained_override="checkpointing.pretrained_checkpoint.path=/trained-checkpoint checkpointing.pretrained_checkpoint.format=megatron_bridge"
 fi
 
 docker run --rm \
@@ -99,8 +116,11 @@ docker run --rm \
     -v "$GYM_RESOURCE_ROOT:/opt/nemo-rl/3rdparty/Gym-workspace/Gym/resources_servers/circle_count" \
     -v "$CONFIG_PATH:/opt/nemo-rl/examples/configs/recipes/vlm/qwen3_vl_circle_count.yaml:ro" \
     -v "$VLLM_INPUT_IMAGE_PATCH_PATH:/compat/vllm_input_image_v05.patch:ro" \
+    "${checkpoint_mount_args[@]}" \
     -e WANDB_API_KEY \
     -e WANDB_MODE \
+    -e PRETRAINED_OVERRIDE="$pretrained_override" \
+    -e EXTRA_OVERRIDES \
     -e HF_HOME=/cache/huggingface \
     -e HF_HUB_CACHE=/cache/huggingface/hub \
     -e HF_DATASETS_CACHE=/cache/huggingface/datasets \
@@ -123,5 +143,7 @@ patch --forward --batch -p1 < /compat/vllm_input_image_v05.patch
 uv run python examples/nemo_gym/run_grpo_nemo_gym.py \\
     --config examples/configs/recipes/vlm/qwen3_vl_circle_count.yaml \\
     logger.wandb.name=${EXPERIMENT} \\
+    \$PRETRAINED_OVERRIDE \\
+    \$EXTRA_OVERRIDES \\
     2>&1 | tee /runstate/logs/run.log
 "
