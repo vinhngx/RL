@@ -1,12 +1,12 @@
 defaults: ../../../nemo_gym/grpo_workplace_assistant_nemotron_nano_v2_9b.yaml
 
 grpo:
-  num_prompts_per_step: 1
-  num_generations_per_prompt: 2
+  num_prompts_per_step: 4
+  num_generations_per_prompt: 4
   max_rollout_turns: 1
   max_num_epochs: 1
-  max_num_steps: 0
-  val_period: 0
+  max_num_steps: 24
+  val_period: 4
   val_at_start: true
   max_val_samples: null
   skip_reference_policy_logprobs_calculation: true
@@ -15,15 +15,17 @@ loss_fn:
   reference_policy_kl_penalty: 0.0
 
 checkpointing:
-  enabled: false
+  enabled: true
   checkpoint_dir: /runstate/checkpoints
+  keep_top_k: 2
+  save_period: 4
 
 policy:
   model_name: Qwen/Qwen3-VL-2B-Instruct
   tokenizer:
     name: Qwen/Qwen3-VL-2B-Instruct
     chat_template_kwargs: null
-  train_global_batch_size: 2
+  train_global_batch_size: 16
   train_micro_batch_size: 1
   logprob_batch_size: 1
   max_total_sequence_length: 2048
@@ -43,8 +45,13 @@ policy:
     sequence_parallel: false
     empty_unused_memory_level: 1
     optimizer:
+      lr: 1.0e-5
+      min_lr: 1.0e-6
       optimizer_cpu_offload: true
       optimizer_offload_fraction: 1.0
+    scheduler:
+      lr_warmup_iters: 2
+      lr_warmup_init: 1.0e-6
     distributed_data_parallel_config:
       overlap_grad_reduce: false
       overlap_param_gather: false
@@ -81,7 +88,7 @@ data:
   train_jsonl_fpath: /runstate/data/train.jsonl
   validation_jsonl_fpath: /runstate/data/validation.jsonl
   agent_name: circle_count_simple_agent
-  shuffle: false
+  shuffle: true
   num_workers: 0
 
 env:
