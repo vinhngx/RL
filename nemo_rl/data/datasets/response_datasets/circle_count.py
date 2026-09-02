@@ -34,14 +34,14 @@ def format_circle_count_dataset(datum_dict: dict[str, Any]) -> dict[str, Any]:
     row = json.loads(datum_dict["raw"])
     params = row["responses_create_params"]
 
-    image_b64 = None
+    image_url = None
     question_text = ""
     for message in params["input"]:
         if message["role"] != "user":
             continue
         for content in message["content"]:
             if content["type"] == "input_image":
-                image_b64 = content["image_url"].split(",", 1)[1]
+                image_url = content["image_url"]
             elif content["type"] == "input_text":
                 question_text = content["text"]
 
@@ -54,7 +54,7 @@ def format_circle_count_dataset(datum_dict: dict[str, Any]) -> dict[str, Any]:
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": image_b64},
+                    {"type": "image", "image": image_url},
                     {"type": "text", "text": question_text},
                 ],
             },
