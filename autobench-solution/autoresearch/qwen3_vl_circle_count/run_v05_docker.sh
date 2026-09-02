@@ -22,6 +22,7 @@ BREV_ROOT="${BREV_ROOT:-/ephemeral/nemo-rl/${USER:-ubuntu}}"
 CACHE_ROOT="${CACHE_ROOT:-${BREV_ROOT}/cache}"
 CAMPAIGN_ROOT="${CAMPAIGN_ROOT:-${BREV_ROOT}/nemo-rl-auto-research/${CAMPAIGN_NAME}}"
 EXP_DIR="${EXP_DIR:-${CAMPAIGN_ROOT}/${EXPERIMENT}}"
+DATA_ROOT="${DATA_ROOT:-${CAMPAIGN_ROOT}/data}"
 GYM_ROOT="${GYM_ROOT:-${CAMPAIGN_ROOT}/preflight/gym-src}"
 CONFIG_PATH="${CONFIG_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/baseline_v05.yaml}"
 IMAGE="${IMAGE:-nemo-rl:qwen3vl-smoke-cu129}"
@@ -35,8 +36,8 @@ if [[ ! -d "$GYM_ROOT/resources_servers/circle_count" ]]; then
     echo "Error: pinned Circle Count Gym source is missing at $GYM_ROOT." >&2
     exit 1
 fi
-if [[ ! -f "$EXP_DIR/data/train.jsonl" || ! -f "$EXP_DIR/data/validation.jsonl" ]]; then
-    echo "Error: train and validation JSONL files are required under $EXP_DIR/data." >&2
+if [[ ! -f "$DATA_ROOT/train.jsonl" || ! -f "$DATA_ROOT/validation.jsonl" ]]; then
+    echo "Error: train and validation JSONL files are required under $DATA_ROOT." >&2
     exit 1
 fi
 
@@ -63,6 +64,7 @@ docker run --rm \
     --ulimit stack=67108864 \
     -v "$CACHE_ROOT:/cache" \
     -v "$EXP_DIR:/runstate" \
+    -v "$DATA_ROOT:/runstate/data:ro" \
     -v "$GYM_ROOT/resources_servers/circle_count:/opt/nemo-rl/3rdparty/Gym-workspace/Gym/resources_servers/circle_count:ro" \
     -v "$CONFIG_PATH:/opt/nemo-rl/examples/configs/recipes/vlm/qwen3_vl_circle_count.yaml:ro" \
     -e WANDB_API_KEY \
