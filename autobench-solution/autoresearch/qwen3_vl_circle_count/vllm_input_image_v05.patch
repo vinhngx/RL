@@ -50,3 +50,13 @@ diff --git a/3rdparty/Gym-workspace/Gym/nemo_gym/openai_utils.py b/3rdparty/Gym-
 +            ],
 +        ]
 +    ]
+
+diff --git a/3rdparty/Megatron-Bridge-workspace/Megatron-Bridge/src/megatron/bridge/models/qwen_vl/modelling_qwen3_vl/utils.py b/3rdparty/Megatron-Bridge-workspace/Megatron-Bridge/src/megatron/bridge/models/qwen_vl/modelling_qwen3_vl/utils.py
+--- a/3rdparty/Megatron-Bridge-workspace/Megatron-Bridge/src/megatron/bridge/models/qwen_vl/modelling_qwen3_vl/utils.py
++++ b/3rdparty/Megatron-Bridge-workspace/Megatron-Bridge/src/megatron/bridge/models/qwen_vl/modelling_qwen3_vl/utils.py
+@@ -85,0 +86,5 @@ def get_rope_index(
++    # Megatron supplies a 4-D causal mask, while mRoPE indexing accepts only a
++    # 2-D padding mask; causality remains enforced by the language model.
++    if attention_mask is not None and attention_mask.ndim != 2:
++        attention_mask = None
++
