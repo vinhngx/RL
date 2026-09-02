@@ -64,6 +64,32 @@ diff --git a/3rdparty/Megatron-Bridge-workspace/Megatron-Bridge/src/megatron/bri
 diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
 --- a/nemo_rl/algorithms/grpo.py
 +++ b/nemo_rl/algorithms/grpo.py
+@@ -235,8 +235,13 @@ def setup(
+     # ==========================
+     checkpointer = CheckpointManager(master_config["checkpointing"])
+     last_checkpoint_path = checkpointer.get_latest_checkpoint_path()
+-    grpo_save_state: Optional[GRPOSaveState] = cast(
+-        Optional[GRPOSaveState], checkpointer.load_training_info(last_checkpoint_path)
++    evaluation_weights_path = os.environ.get("NRL_EVALUATION_WEIGHTS_PATH")
++    grpo_save_state: Optional[GRPOSaveState] = (
++        None
++        if evaluation_weights_path
++        else cast(
++            Optional[GRPOSaveState], checkpointer.load_training_info(last_checkpoint_path)
++        )
+     )
+     if grpo_save_state is None:
+         grpo_save_state = _default_grpo_save_state()
+@@ -454,5 +459,8 @@ def setup(
+     # Prepare checkpoint paths
+-    if last_checkpoint_path:
++    if evaluation_weights_path:
++        weights_path = Path(evaluation_weights_path)
++        optimizer_path = None
++    elif last_checkpoint_path:
+         weights_path = Path(last_checkpoint_path) / "policy" / "weights"
+         optimizer_path = Path(last_checkpoint_path) / "policy" / "optimizer"
+     else:
 @@ -1536,3 +1536,1 @@ def grpo_train(
 -                            optimizer_path=os.path.join(
 -                                checkpoint_path, "policy", "optimizer"

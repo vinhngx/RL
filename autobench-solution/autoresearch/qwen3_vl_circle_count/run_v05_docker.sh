@@ -97,10 +97,10 @@ if [[ ! -f "$GYM_RESOURCE_ROOT/app.py" ]]; then
 fi
 
 checkpoint_mount_args=()
-pretrained_override=""
+evaluation_weights_path=""
 if [[ -n "$PRETRAINED_CHECKPOINT_PATH" ]]; then
     checkpoint_mount_args=(-v "$PRETRAINED_CHECKPOINT_PATH:/trained-checkpoint:ro")
-    pretrained_override="checkpointing.pretrained_checkpoint.path=/trained-checkpoint checkpointing.pretrained_checkpoint.format=megatron_bridge"
+    evaluation_weights_path="/trained-checkpoint"
 fi
 
 docker run --rm \
@@ -119,7 +119,7 @@ docker run --rm \
     "${checkpoint_mount_args[@]}" \
     -e WANDB_API_KEY \
     -e WANDB_MODE \
-    -e PRETRAINED_OVERRIDE="$pretrained_override" \
+    -e NRL_EVALUATION_WEIGHTS_PATH="$evaluation_weights_path" \
     -e EXTRA_OVERRIDES \
     -e HF_HOME=/cache/huggingface \
     -e HF_HUB_CACHE=/cache/huggingface/hub \
@@ -143,7 +143,6 @@ patch --forward --batch -p1 < /compat/vllm_input_image_v05.patch
 uv run python examples/nemo_gym/run_grpo_nemo_gym.py \\
     --config examples/configs/recipes/vlm/qwen3_vl_circle_count.yaml \\
     logger.wandb.name=${EXPERIMENT} \\
-    \$PRETRAINED_OVERRIDE \\
     \$EXTRA_OVERRIDES \\
     2>&1 | tee /runstate/logs/run.log
 "
