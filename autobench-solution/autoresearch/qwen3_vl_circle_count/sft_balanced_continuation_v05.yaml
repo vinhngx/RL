@@ -4,10 +4,10 @@ sft:
   max_num_epochs: 1
   max_num_steps: 24
   val_period: 8
-  val_batches: 8
+  val_batches: 1
   val_global_batch_size: 16
   val_micro_batch_size: 1
-  val_at_start: true
+  val_at_start: false
   val_at_end: false
   seed: 42
   only_unmask_final: false
