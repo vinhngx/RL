@@ -1,0 +1,97 @@
+defaults: ../../sft.yaml
+
+sft:
+  max_num_epochs: 4
+  max_num_steps: 64
+  val_period: 8
+  val_batches: 4
+  val_global_batch_size: 16
+  val_micro_batch_size: 1
+  val_at_start: true
+  val_at_end: true
+  seed: 42
+  only_unmask_final: false
+
+checkpointing:
+  enabled: false
+  checkpoint_dir: /runstate/checkpoints
+
+policy:
+  model_name: Qwen/Qwen3-VL-2B-Instruct
+  tokenizer:
+    name: ${policy.model_name}
+    chat_template_kwargs:
+      enable_thinking: false
+  train_global_batch_size: 8
+  train_micro_batch_size: 1
+  max_total_sequence_length: 2048
+  precision: bfloat16
+  make_sequence_length_divisible_by: 1
+
+  dtensor_cfg:
+    enabled: false
+
+  dynamic_batching:
+    enabled: false
+
+  sequence_packing:
+    enabled: false
+
+  megatron_cfg:
+    enabled: true
+    activation_checkpointing: false
+    use_fused_linear_logprobs: false
+    tensor_model_parallel_size: 1
+    pipeline_model_parallel_size: 1
+    context_parallel_size: 1
+    sequence_parallel: false
+    empty_unused_memory_level: 1
+    apply_rope_fusion: true
+    bias_activation_fusion: false
+    optimizer:
+      lr: 2.0e-6
+      min_lr: 2.0e-7
+      optimizer_cpu_offload: true
+      optimizer_offload_fraction: 1.0
+    scheduler:
+      lr_warmup_iters: 4
+      lr_warmup_init: 2.0e-7
+      lr_decay_style: cosine
+      lr_decay_iters: 64
+    distributed_data_parallel_config:
+      overlap_grad_reduce: false
+      overlap_param_gather: false
+
+data:
+  max_input_seq_length: ${policy.max_total_sequence_length}
+  add_bos: false
+  add_eos: true
+  add_generation_prompt: false
+  shuffle: true
+  num_workers: 0
+  train:
+    dataset_name: openai_format
+    data_path: /runstate/sft-data/train.jsonl
+  validation:
+    dataset_name: openai_format
+    data_path: /runstate/sft-data/validation.jsonl
+  default:
+    processor: sft_processor
+    prompt_file: null
+    system_prompt_file: null
+
+logger:
+  log_dir: /runstate/logs
+  wandb_enabled: true
+  tensorboard_enabled: false
+  mlflow_enabled: false
+  swanlab_enabled: false
+  monitor_gpus: true
+  wandb:
+    project: qwen3-vl-circle-count-autoresearch
+    name: sft-supervised
+
+cluster:
+  gpus_per_node: 1
+  num_nodes: 1
+  segment_size: null
