@@ -45,13 +45,13 @@ policy:
     sequence_parallel: false
     empty_unused_memory_level: 1
     optimizer:
-      lr: 1.0e-5
-      min_lr: 1.0e-6
+      lr: 1.0e-6
+      min_lr: 1.0e-7
       optimizer_cpu_offload: true
       optimizer_offload_fraction: 1.0
     scheduler:
       lr_warmup_iters: 2
-      lr_warmup_init: 1.0e-6
+      lr_warmup_init: 1.0e-7
     distributed_data_parallel_config:
       overlap_grad_reduce: false
       overlap_param_gather: false
