@@ -23,10 +23,12 @@ CACHE_ROOT="${CACHE_ROOT:-${BREV_ROOT}/cache}"
 CAMPAIGN_ROOT="${CAMPAIGN_ROOT:-${BREV_ROOT}/nemo-rl-auto-research/${CAMPAIGN_NAME}}"
 EXP_DIR="${EXP_DIR:-${CAMPAIGN_ROOT}/${EXPERIMENT}}"
 DATA_ROOT="${DATA_ROOT:-${CAMPAIGN_ROOT}/data}"
+RUN_DATA_ROOT="$DATA_ROOT"
 GYM_ROOT="${GYM_ROOT:-${CAMPAIGN_ROOT}/preflight/gym-src}"
 GYM_RESOURCE_ROOT="${GYM_RESOURCE_ROOT:-${CAMPAIGN_ROOT}/runtime/gym-resources/circle_count}"
 CONFIG_PATH="${CONFIG_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/baseline_v05.yaml}"
 VLLM_INPUT_IMAGE_PATCH_PATH="${VLLM_INPUT_IMAGE_PATCH_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/vllm_input_image_v05.patch}"
+SYSTEM_PROMPT_FILE="${SYSTEM_PROMPT_FILE:-}"
 IMAGE="${IMAGE:-nemo-rl:qwen3vl-smoke-cu129}"
 CONTAINER_NAME="${CONTAINER_NAME:-nemo-rl-qwen3-vl-circle-count-${EXPERIMENT}}"
 WANDB_MODE="${WANDB_MODE:-online}"
@@ -47,6 +49,10 @@ if [[ ! -f "$VLLM_INPUT_IMAGE_PATCH_PATH" ]]; then
     echo "Error: v0.5 input-image compatibility patch is missing." >&2
     exit 1
 fi
+if [[ -n "$SYSTEM_PROMPT_FILE" && ! -f "$SYSTEM_PROMPT_FILE" ]]; then
+    echo "Error: system prompt file is missing at $SYSTEM_PROMPT_FILE." >&2
+    exit 1
+fi
 
 if [[ -f "$REPO_ROOT/.env" ]]; then
     set -a
@@ -62,6 +68,17 @@ fi
 mkdir -p \
     "$CACHE_ROOT"/{huggingface,torch,triton,uv,pip,xdg,wandb} \
     "$EXP_DIR"/{logs,checkpoints,artifacts/megatron,ray,tmp,wandb}
+if [[ -n "$SYSTEM_PROMPT_FILE" ]]; then
+    RUN_DATA_ROOT="$EXP_DIR/data"
+    mkdir -p "$RUN_DATA_ROOT"
+    for split in train validation final_eval; do
+        if [[ -f "$DATA_ROOT/$split.jsonl" ]]; then
+            jq --compact-output --rawfile system_prompt "$SYSTEM_PROMPT_FILE" \
+                '(.responses_create_params.input[] | select(.role == "system") | .content) = ($system_prompt | rtrimstr("\n"))' \
+                "$DATA_ROOT/$split.jsonl" > "$RUN_DATA_ROOT/$split.jsonl"
+        fi
+    done
+fi
 if [[ ! -f "$GYM_RESOURCE_ROOT/app.py" ]]; then
     mkdir -p "$GYM_RESOURCE_ROOT"
     cp -a "$GYM_ROOT/resources_servers/circle_count/." "$GYM_RESOURCE_ROOT"
@@ -75,7 +92,7 @@ docker run --rm \
     --ulimit stack=67108864 \
     -v "$CACHE_ROOT:/cache" \
     -v "$EXP_DIR:/runstate" \
-    -v "$DATA_ROOT:/runstate/data:ro" \
+    -v "$RUN_DATA_ROOT:/runstate/data:ro" \
     -v "$GYM_RESOURCE_ROOT:/opt/nemo-rl/3rdparty/Gym-workspace/Gym/resources_servers/circle_count" \
     -v "$CONFIG_PATH:/opt/nemo-rl/examples/configs/recipes/vlm/qwen3_vl_circle_count.yaml:ro" \
     -v "$VLLM_INPUT_IMAGE_PATCH_PATH:/compat/vllm_input_image_v05.patch:ro" \

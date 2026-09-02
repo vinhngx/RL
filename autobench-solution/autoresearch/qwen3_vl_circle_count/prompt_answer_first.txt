@@ -1,0 +1,1 @@
+Count the circles of the color named by the user. Your response must begin with your best final count in \boxed{N} format. Never revise that boxed count. You may explain only after the box.
