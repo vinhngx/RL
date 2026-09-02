@@ -76,7 +76,7 @@ data:
   system_key: null
   system_prompt: null
   tool_key: tools
-  use_preserving_dataset: false
+  use_preserving_dataset: true
   prompt_file: null
   split: null
   output_key: null
