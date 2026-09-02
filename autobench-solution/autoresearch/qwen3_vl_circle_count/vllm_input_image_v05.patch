@@ -95,3 +95,12 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
 -                                checkpoint_path, "policy", "optimizer"
 -                            ),
 +                            optimizer_path=None,
+
+diff --git a/nemo_rl/algorithms/sft.py b/nemo_rl/algorithms/sft.py
+--- a/nemo_rl/algorithms/sft.py
++++ b/nemo_rl/algorithms/sft.py
+@@ -558,3 +558,1 @@ def sft_train(
+-                            optimizer_path=os.path.join(
+-                                checkpoint_path, "policy", "optimizer"
+-                            ),
++                            optimizer_path=None,
