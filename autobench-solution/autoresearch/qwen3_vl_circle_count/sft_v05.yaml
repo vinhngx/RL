@@ -69,16 +69,18 @@ data:
   add_generation_prompt: false
   shuffle: true
   num_workers: 0
-  train:
-    dataset_name: openai_format
-    data_path: /runstate/sft-data/train.jsonl
-  validation:
-    dataset_name: openai_format
-    data_path: /runstate/sft-data/validation.jsonl
-  default:
-    processor: sft_processor
-    prompt_file: null
-    system_prompt_file: null
+  dataset_name: openai_format
+  train_data_path: /runstate/sft-data/train.jsonl
+  val_data_path: /runstate/sft-data/validation.jsonl
+  chat_key: messages
+  system_key: null
+  system_prompt: null
+  tool_key: tools
+  use_preserving_dataset: false
+  prompt_file: null
+  split: null
+  output_key: null
+  seed: null
 
 logger:
   log_dir: /runstate/logs
