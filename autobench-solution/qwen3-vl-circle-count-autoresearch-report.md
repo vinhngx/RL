@@ -156,11 +156,18 @@ using the launcher's `PRETRAINED_CHECKPOINT_PATH`, `VALIDATION_SPLIT`, and
 
 ## W&B and Persisted Evidence
 
-Every authoritative run produced a local W&B offline directory. The supplied
-credential was not accepted by pinned W&B 0.21.1 because it was not a
-40-character API key, so no run was silently dropped and no credential is
-included in this report or Git history. The offline runs can be synced after a
-compatible key is installed.
+Every authoritative run produced a local W&B offline directory. The campaign
+image pins W&B 0.21.1, which does not support newer long-form API keys. After a
+valid replacement key was supplied, it was verified with W&B 0.22.3 and the
+offline records were synced to the
+[`qwen3-vl-circle-count-autoresearch`](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch)
+project. The remote project contains all 23 non-empty run records; two
+zero-byte records from pre-run crashes were correctly skipped. Remote metric
+checks reproduced the baseline, answer-first, retained SFT, trained validation,
+and final-evaluation values in this report. Some optional artifact uploads
+could not be reconstructed because their temporary staging files had already
+expired, but scalar histories, run configurations, and summaries are online.
+No credential is included in this report or Git history.
 
 Heavy state is kept outside Git under:
 
@@ -183,6 +190,7 @@ runs, the imported base-model artifact, and the retained trained checkpoint.
 - The retained checkpoint loaded without optimizer state.
 - The validation evaluator processed 64/64 examples at 59.38% accuracy.
 - The one untouched final evaluator processed 128/128 examples at 50.00%.
+- W&B exposes 23/23 non-empty run records and reproduces the five key metrics.
 
 ## Limitations
 
