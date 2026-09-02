@@ -1,7 +1,7 @@
 diff --git a/3rdparty/Gym-workspace/Gym/responses_api_models/vllm_model/app.py b/3rdparty/Gym-workspace/Gym/responses_api_models/vllm_model/app.py
 --- a/3rdparty/Gym-workspace/Gym/responses_api_models/vllm_model/app.py
 +++ b/3rdparty/Gym-workspace/Gym/responses_api_models/vllm_model/app.py
-@@ -472,6 +472,15 @@ class VLLMConverter(BaseModel):
+@@ -472,5 +472,14 @@ class VLLMConverter(BaseModel):
                  match part_param["type"]:
                      case "input_text":
                          part_param["type"] = "text"
@@ -16,4 +16,37 @@ diff --git a/3rdparty/Gym-workspace/Gym/responses_api_models/vllm_model/app.py b
 +                        part_param["image_url"] = image_url
                      case _:
                          raise NotImplementedError(f"Unsupported part param type: {part_param['type']}")
- 
+diff --git a/3rdparty/Gym-workspace/Gym/nemo_gym/openai_utils.py b/3rdparty/Gym-workspace/Gym/nemo_gym/openai_utils.py
+--- a/3rdparty/Gym-workspace/Gym/nemo_gym/openai_utils.py
++++ b/3rdparty/Gym-workspace/Gym/nemo_gym/openai_utils.py
+@@ -28,5 +28,6 @@ from openai.types.chat import (
+     ChatCompletion,
+     ChatCompletionAssistantMessageParam,
++    ChatCompletionContentPartImageParam,
+     ChatCompletionContentPartTextParam,
+     ChatCompletionDeveloperMessageParam,
+     ChatCompletionMessage,
+@@ -323,6 +324,20 @@ class NeMoGymChatCompletionContentPartTextParam(ChatCompletionContentPartTextPar
+     pass
+-
+-
++
++
++class NeMoGymChatCompletionContentPartImageParam(ChatCompletionContentPartImageParam):
++    pass
++
++
+ class NeMoGymChatCompletionUserMessageParam(ChatCompletionUserMessageParam):
+     # Override the iterable which is annoying to work with.
+-    content: Required[Union[str, List[NeMoGymChatCompletionContentPartTextParam]]]
++    content: Required[
++        Union[
++            str,
++            List[
++                Union[
++                    NeMoGymChatCompletionContentPartTextParam,
++                    NeMoGymChatCompletionContentPartImageParam,
++                ]
++            ],
++        ]
++    ]
