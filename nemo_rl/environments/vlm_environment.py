@@ -31,6 +31,7 @@ from nemo_rl.environments.metrics import (
 )
 from nemo_rl.environments.rewards import (
     bbox_giou_reward,
+    boxed_numeric_reward,
     combine_reward_functions,
     exact_answer_alphanumeric_reward,
     format_reward,
@@ -76,6 +77,8 @@ class VLMVerifyWorker:
                 reward_func = math_expression_reward
             elif reward_func_name == "bbox_giou":
                 reward_func = bbox_giou_reward
+            elif reward_func_name == "boxed_numeric":
+                reward_func = boxed_numeric_reward
             else:
                 raise ValueError(f"Invalid reward function: {reward_func_name}")
 

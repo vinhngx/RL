@@ -515,6 +515,9 @@ def vlm_hf_data_processor(
     idx: int,
 ) -> DatumSpec:
     """Process a datum dictionary (directly loaded from response_datasets/<dataset_name>.py) into a DatumSpec for the VLM Environment."""
+    from nemo_rl.data.datasets.response_datasets.circle_count import (
+        format_circle_count_dataset,
+    )
     from nemo_rl.data.datasets.response_datasets.clevr import (
         format_clevr_cogent_dataset,
     )
@@ -530,7 +533,9 @@ def vlm_hf_data_processor(
     )
 
     # depending on the task, format the data differently
-    if datum_dict["task_name"] == "clevr-cogent":
+    if datum_dict["task_name"] == "circle-count":
+        datum_dict = format_circle_count_dataset(datum_dict)
+    elif datum_dict["task_name"] == "clevr-cogent":
         datum_dict = format_clevr_cogent_dataset(datum_dict)
     elif datum_dict["task_name"] == "refcoco":
         datum_dict = format_refcoco_dataset(datum_dict)
