@@ -90,6 +90,11 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
          weights_path = Path(last_checkpoint_path) / "policy" / "weights"
          optimizer_path = Path(last_checkpoint_path) / "policy" / "optimizer"
      else:
+@@ -475,3 +483,3 @@ def setup(
+             weights_path=weights_path,
+             optimizer_path=optimizer_path,
+-            init_optimizer=True,
++            init_optimizer=not bool(evaluation_weights_path),
 @@ -1536,3 +1536,1 @@ def grpo_train(
 -                            optimizer_path=os.path.join(
 -                                checkpoint_path, "policy", "optimizer"
