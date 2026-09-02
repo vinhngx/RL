@@ -26,6 +26,7 @@ DATA_ROOT="${DATA_ROOT:-${CAMPAIGN_ROOT}/data}"
 GYM_ROOT="${GYM_ROOT:-${CAMPAIGN_ROOT}/preflight/gym-src}"
 GYM_RESOURCE_ROOT="${GYM_RESOURCE_ROOT:-${CAMPAIGN_ROOT}/runtime/gym-resources/circle_count}"
 CONFIG_PATH="${CONFIG_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/baseline_v05.yaml}"
+VLLM_INPUT_IMAGE_PATCH_PATH="${VLLM_INPUT_IMAGE_PATCH_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/vllm_input_image_v05.patch}"
 IMAGE="${IMAGE:-nemo-rl:qwen3vl-smoke-cu129}"
 CONTAINER_NAME="${CONTAINER_NAME:-nemo-rl-qwen3-vl-circle-count-${EXPERIMENT}}"
 WANDB_MODE="${WANDB_MODE:-online}"
@@ -40,6 +41,10 @@ if [[ ! -d "$GYM_ROOT/resources_servers/circle_count" ]]; then
 fi
 if [[ ! -f "$DATA_ROOT/train.jsonl" || ! -f "$DATA_ROOT/validation.jsonl" ]]; then
     echo "Error: train and validation JSONL files are required under $DATA_ROOT." >&2
+    exit 1
+fi
+if [[ ! -f "$VLLM_INPUT_IMAGE_PATCH_PATH" ]]; then
+    echo "Error: v0.5 input-image compatibility patch is missing." >&2
     exit 1
 fi
 
@@ -73,6 +78,7 @@ docker run --rm \
     -v "$DATA_ROOT:/runstate/data:ro" \
     -v "$GYM_RESOURCE_ROOT:/opt/nemo-rl/3rdparty/Gym-workspace/Gym/resources_servers/circle_count" \
     -v "$CONFIG_PATH:/opt/nemo-rl/examples/configs/recipes/vlm/qwen3_vl_circle_count.yaml:ro" \
+    -v "$VLLM_INPUT_IMAGE_PATCH_PATH:/compat/vllm_input_image_v05.patch:ro" \
     -e WANDB_API_KEY \
     -e WANDB_MODE \
     -e HF_HOME=/cache/huggingface \
@@ -93,6 +99,7 @@ docker run --rm \
     -w /opt/nemo-rl \
     "$IMAGE" \
     bash -o pipefail -lc "
+patch --forward --batch -p1 < /compat/vllm_input_image_v05.patch
 uv run python examples/nemo_gym/run_grpo_nemo_gym.py \\
     --config examples/configs/recipes/vlm/qwen3_vl_circle_count.yaml \\
     logger.wandb.name=${EXPERIMENT} \\

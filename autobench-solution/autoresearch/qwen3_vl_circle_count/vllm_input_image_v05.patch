@@ -1,0 +1,19 @@
+diff --git a/3rdparty/Gym-workspace/Gym/responses_api_models/vllm_model/app.py b/3rdparty/Gym-workspace/Gym/responses_api_models/vllm_model/app.py
+--- a/3rdparty/Gym-workspace/Gym/responses_api_models/vllm_model/app.py
++++ b/3rdparty/Gym-workspace/Gym/responses_api_models/vllm_model/app.py
+@@ -472,6 +472,15 @@ class VLLMConverter(BaseModel):
+                 match part_param["type"]:
+                     case "input_text":
+                         part_param["type"] = "text"
++                    case "input_image":
++                        image_url = {"url": part_param["image_url"]}
++                        detail = part_param.get("detail")
++                        if detail is not None:
++                            image_url["detail"] = detail
++
++                        part_param.clear()
++                        part_param["type"] = "image_url"
++                        part_param["image_url"] = image_url
+                     case _:
+                         raise NotImplementedError(f"Unsupported part param type: {part_param['type']}")
+ 
