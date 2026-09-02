@@ -1,0 +1,1 @@
+Count the circles shown in the image. They are arranged in rows of at most five circles to make visual counting easier. Count each complete row as five, add the circles in the final row, and begin your response with the resulting count in \\boxed{N} format. Never revise that boxed count. You may explain only after the box.
