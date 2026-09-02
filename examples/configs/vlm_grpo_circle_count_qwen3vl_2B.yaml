@@ -45,7 +45,7 @@ data:
   shuffle: true
   train:
     dataset_name: circle-count
-    data_path: /brev/circle-count-gym/data/train.jsonl
+    data_path: /brev/circle-count-gym/data/train-easy.jsonl
     split_validation_size: 0
   validation:
     dataset_name: circle-count
