@@ -2,8 +2,8 @@ defaults: ../../sft.yaml
 
 sft:
   max_num_epochs: 2
-  max_num_steps: 32
-  val_period: 16
+  max_num_steps: 24
+  val_period: 12
   val_batches: 1
   val_global_batch_size: 16
   val_micro_batch_size: 1
@@ -13,8 +13,14 @@ sft:
   only_unmask_final: false
 
 checkpointing:
-  enabled: false
+  enabled: true
   checkpoint_dir: /runstate/checkpoints
+  metric_name: val:val_loss
+  higher_is_better: false
+  keep_top_k: 1
+  save_period: 24
+  checkpoint_must_save_by: null
+  save_optimizer: false
 
 policy:
   model_name: Qwen/Qwen3-VL-2B-Instruct
@@ -58,7 +64,7 @@ policy:
       lr_warmup_iters: 4
       lr_warmup_init: 2.0e-7
       lr_decay_style: cosine
-      lr_decay_iters: 32
+      lr_decay_iters: 24
     distributed_data_parallel_config:
       overlap_grad_reduce: false
       overlap_param_gather: false
