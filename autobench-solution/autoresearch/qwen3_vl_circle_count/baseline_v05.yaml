@@ -15,7 +15,7 @@ loss_fn:
   reference_policy_kl_penalty: 0.0
 
 checkpointing:
-  enabled: true
+  enabled: false
   checkpoint_dir: /runstate/checkpoints
   keep_top_k: 2
   save_period: 4

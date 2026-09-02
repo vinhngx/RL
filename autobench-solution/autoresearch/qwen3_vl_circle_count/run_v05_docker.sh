@@ -26,6 +26,7 @@ DATA_ROOT="${DATA_ROOT:-${CAMPAIGN_ROOT}/data}"
 RUN_DATA_ROOT="$DATA_ROOT"
 GYM_ROOT="${GYM_ROOT:-${CAMPAIGN_ROOT}/preflight/gym-src}"
 GYM_RESOURCE_ROOT="${GYM_RESOURCE_ROOT:-${CAMPAIGN_ROOT}/runtime/gym-resources/circle_count}"
+MEGATRON_ARTIFACT_ROOT="${MEGATRON_ARTIFACT_ROOT:-${CAMPAIGN_ROOT}/model-artifacts/megatron}"
 CONFIG_PATH="${CONFIG_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/baseline_v05.yaml}"
 VLLM_INPUT_IMAGE_PATCH_PATH="${VLLM_INPUT_IMAGE_PATCH_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/vllm_input_image_v05.patch}"
 SYSTEM_PROMPT_FILE="${SYSTEM_PROMPT_FILE:-}"
@@ -67,7 +68,8 @@ fi
 
 mkdir -p \
     "$CACHE_ROOT"/{huggingface,torch,triton,uv,pip,xdg,wandb} \
-    "$EXP_DIR"/{logs,checkpoints,artifacts/megatron,ray,tmp,wandb}
+    "$EXP_DIR"/{logs,checkpoints,ray,tmp,wandb} \
+    "$MEGATRON_ARTIFACT_ROOT"
 if [[ -n "$SYSTEM_PROMPT_FILE" ]]; then
     RUN_DATA_ROOT="$EXP_DIR/data"
     mkdir -p "$RUN_DATA_ROOT"
@@ -93,6 +95,7 @@ docker run --rm \
     -v "$CACHE_ROOT:/cache" \
     -v "$EXP_DIR:/runstate" \
     -v "$RUN_DATA_ROOT:/runstate/data:ro" \
+    -v "$MEGATRON_ARTIFACT_ROOT:/model-artifacts" \
     -v "$GYM_RESOURCE_ROOT:/opt/nemo-rl/3rdparty/Gym-workspace/Gym/resources_servers/circle_count" \
     -v "$CONFIG_PATH:/opt/nemo-rl/examples/configs/recipes/vlm/qwen3_vl_circle_count.yaml:ro" \
     -v "$VLLM_INPUT_IMAGE_PATCH_PATH:/compat/vllm_input_image_v05.patch:ro" \
@@ -111,7 +114,7 @@ docker run --rm \
     -e WANDB_DIR=/runstate/wandb \
     -e RAY_TMPDIR=/runstate/ray \
     -e TMPDIR=/runstate/tmp \
-    -e NRL_MEGATRON_CHECKPOINT_DIR=/runstate/artifacts/megatron \
+    -e NRL_MEGATRON_CHECKPOINT_DIR=/model-artifacts \
     -e PYTORCH_ALLOC_CONF=expandable_segments:True \
     -w /opt/nemo-rl \
     "$IMAGE" \
