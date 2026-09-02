@@ -60,3 +60,12 @@ diff --git a/3rdparty/Megatron-Bridge-workspace/Megatron-Bridge/src/megatron/bri
 +    if attention_mask is not None and attention_mask.ndim != 2:
 +        attention_mask = None
 +
+
+diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
+--- a/nemo_rl/algorithms/grpo.py
++++ b/nemo_rl/algorithms/grpo.py
+@@ -1536,3 +1536,1 @@ def grpo_train(
+-                            optimizer_path=os.path.join(
+-                                checkpoint_path, "policy", "optimizer"
+-                            ),
++                            optimizer_path=None,
