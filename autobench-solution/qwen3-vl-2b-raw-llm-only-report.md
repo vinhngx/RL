@@ -115,6 +115,8 @@ baseline errors while regressing 16 baseline-correct examples; 128 examples
 were correct under both and 83 were wrong under both. The corresponding exact
 two-sided McNemar p-value is 0.0725, so the measured 13-example gain is useful
 selection evidence but not a high-confidence claim of a general improvement.
+Relative to baseline, expected counts 8--11 contributed a net eight additional
+correct answers, consistent with the intent of the high-count curriculum.
 
 After model and final-result lock, three additional validation passes using the
 same checkpoint, answer-first prompt, and temperature but seeds 43--45 scored
