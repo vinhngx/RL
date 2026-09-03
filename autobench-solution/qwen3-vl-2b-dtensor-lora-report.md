@@ -19,7 +19,7 @@ bfloat16 autocast.
 | --- | ---: | --- | ---: | ---: |
 | Full SFT, no activation checkpointing | 1 | OOM on step 2 | 44.37/44.42 GiB | 1,893.05s training on step 1 |
 | Full SFT, no activation checkpointing | 2 | OOM in backward | 44.16/44.42 GiB | n/a |
-| Full SFT, activation checkpointing | 2 | Stable but slower | about 30.6 GiB | Incomplete after 18 min |
+| Full SFT, activation checkpointing | 2 | OOM on step 2 without boundary cache clear | 43.63/44.42 GiB | 1,828.99s training on step 1 |
 | Full SFT, activation checkpointing | 4 | OOM on step 2 | 43.31/44.42 GiB | 1,875.63s training on step 1 |
 | Full SFT, activation checkpointing | 8 | OOM in backward | 43.23/44.42 GiB | n/a |
 | All-linear LoRA | 4 | OOM in forward | 44.40/44.42 GiB | n/a |
@@ -87,7 +87,13 @@ Its step-1 training, validation, and checkpoint times were 1,875.63, 229.10,
 and 54.07 seconds respectively, and its 8.0-GiB checkpoint is retained.
 
 This repeated result shows that Adam state materialized by the first update is
-part of the real stability boundary. Microbatch 2 with activation checkpointing
-is the next campaign candidate; its 200-step configuration is
+part of the real stability boundary. Without an explicit boundary cache clear,
+microbatch 2 completed step 1 (loss 0.3237, validation loss 0.2666) in 1,828.99
+seconds of training, then OOMed in step-2 log-softmax with 4.13 GiB reserved but
+unallocated. NeMo-RL's supported `clear_cache_every_n_steps` callback runs at
+microbatch 0; setting it to 100000 therefore clears fragmentation once per
+train call without clearing during this 64-microbatch accumulation. Microbatch
+2 with activation checkpointing and this boundary clear is the next campaign
+candidate; its 200-step configuration is
 `autoresearch/qwen3_vl_circle_count/vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-ac-b128-mb2-200.v1.yaml`.
 Its allocation-limited result will be added after the run terminates.

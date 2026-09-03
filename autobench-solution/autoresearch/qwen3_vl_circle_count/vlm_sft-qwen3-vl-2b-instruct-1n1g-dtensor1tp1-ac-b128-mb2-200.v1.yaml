@@ -2,11 +2,14 @@ defaults: vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-b128-200.v1.yaml
 
 # Largest candidate below the mb4 cross-step OOM boundary on one 44.42-GiB
 # L40S. Activation checkpointing is required for retained optimizer-state
-# headroom after the first full-model update.
+# headroom after the first full-model update. A large cache-clear interval
+# triggers only on microbatch 0 of each train call, releasing fragmentation
+# introduced by validation/checkpointing without clearing during accumulation.
 policy:
   train_micro_batch_size: 2
   dtensor_cfg:
     activation_checkpointing: true
+    clear_cache_every_n_steps: 100000
 
 logger:
   wandb:
