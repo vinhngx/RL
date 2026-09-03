@@ -1,8 +1,8 @@
 defaults: vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-b128-200.v1.yaml
 
-# Largest global-batch-128 divisor that fits full SFT on one 44.42-GiB L40S.
-# Microbatch 8 OOMed in backward at 43.23 GiB while requesting 4.69 GiB;
-# microbatch 4 sustained training at about 28.23 GiB before backward peak.
+# One-step boundary candidate on one 44.42-GiB L40S. Microbatch 8 OOMed in
+# step-1 backward. Microbatch 4 completed step 1, then OOMed in step-2 forward
+# after optimizer state had materialized. Retained for reproducibility only.
 policy:
   train_micro_batch_size: 4
   dtensor_cfg:

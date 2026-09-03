@@ -1,0 +1,14 @@
+defaults: vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-b128-200.v1.yaml
+
+# Largest candidate below the mb4 cross-step OOM boundary on one 44.42-GiB
+# L40S. Activation checkpointing is required for retained optimizer-state
+# headroom after the first full-model update.
+policy:
+  train_micro_batch_size: 2
+  dtensor_cfg:
+    activation_checkpointing: true
+
+logger:
+  wandb:
+    project: qwen3-vl-circle-count-autoresearch
+    name: sft-2b-full-ac-b128-mb2-200-dtensor

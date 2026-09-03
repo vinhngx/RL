@@ -20,7 +20,7 @@ bfloat16 autocast.
 | Full SFT, no activation checkpointing | 1 | OOM on step 2 | 44.37/44.42 GiB | 1,893.05s training on step 1 |
 | Full SFT, no activation checkpointing | 2 | OOM in backward | 44.16/44.42 GiB | n/a |
 | Full SFT, activation checkpointing | 2 | Stable but slower | about 30.6 GiB | Incomplete after 18 min |
-| Full SFT, activation checkpointing | 4 | Sustained training | about 28.23 GiB before backward peak | Boundary probe stopped early |
+| Full SFT, activation checkpointing | 4 | OOM on step 2 | 43.31/44.42 GiB | 1,875.63s training on step 1 |
 | Full SFT, activation checkpointing | 8 | OOM in backward | 43.23/44.42 GiB | n/a |
 | All-linear LoRA | 4 | OOM in forward | 44.40/44.42 GiB | n/a |
 | Attention LoRA, raw images | 3 | Stable | about 39.35 GiB | 1,854.60s |
@@ -79,8 +79,15 @@ that the apparent one-step mb1 feasibility did not survive validation and
 checkpoint transitions.
 
 Activation checkpointing was therefore enabled and the global-batch-128
-divisors were searched upward. Microbatch 8 OOMed in backward while requesting
-4.69 GiB with 43.23 GiB already in use. Microbatch 4 is the selected upper
-candidate and the 200-step campaign configuration is
-`autoresearch/qwen3_vl_circle_count/vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-ac-b128-mb4-200.v1.yaml`.
+divisors were searched upward. Microbatch 8 OOMed in step-1 backward while
+requesting 4.69 GiB with 43.23 GiB already in use. Microbatch 4 completed step
+1 with training loss 0.3237 and validation loss 0.27510, but then OOMed in the
+step-2 LM-head forward pass while requesting 1.17 GiB with 43.31 GiB in use.
+Its step-1 training, validation, and checkpoint times were 1,875.63, 229.10,
+and 54.07 seconds respectively, and its 8.0-GiB checkpoint is retained.
+
+This repeated result shows that Adam state materialized by the first update is
+part of the real stability boundary. Microbatch 2 with activation checkpointing
+is the next campaign candidate; its 200-step configuration is
+`autoresearch/qwen3_vl_circle_count/vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-ac-b128-mb2-200.v1.yaml`.
 Its allocation-limited result will be added after the run terminates.
