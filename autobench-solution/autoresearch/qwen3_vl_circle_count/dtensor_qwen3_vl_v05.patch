@@ -15,3 +15,10 @@ diff --git a/nemo_rl/models/policy/utils.py b/nemo_rl/models/policy/utils.py
          "qwen2_5_omni": NeMoAutoModelForTextToWaveform,
          "llava": NeMoAutoModelForImageTextToText,
          "internvl": NeMoAutoModelForImageTextToText,
+diff --git a/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py b/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
+--- a/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
++++ b/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
+@@ -279,1 +279,3 @@ class DTensorPolicyWorkerV2(PolicyWorker):
+             automodel_kwargs["backend"] = backend
++        if "attn_implementation" in automodel_kwargs:
++            attn_impl = automodel_kwargs.pop("attn_implementation")
