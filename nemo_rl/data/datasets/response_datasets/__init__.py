@@ -24,7 +24,10 @@ from nemo_rl.data.datasets.response_datasets.deepscaler import DeepScalerDataset
 from nemo_rl.data.datasets.response_datasets.general_conversations_dataset import (
     GeneralConversationsJsonlDataset,
 )
-from nemo_rl.data.datasets.response_datasets.circle_count import CircleCountDataset
+from nemo_rl.data.datasets.response_datasets.circle_count import (
+    CircleCountDataset,
+    CircleCountSFTDataset,
+)
 from nemo_rl.data.datasets.response_datasets.geometry3k import Geometry3KDataset
 from nemo_rl.data.datasets.response_datasets.gsm8k import GSM8KDataset
 from nemo_rl.data.datasets.response_datasets.helpsteer3 import HelpSteer3Dataset
@@ -48,6 +51,7 @@ DATASET_REGISTRY = {
     # built-in datasets
     "AIME2024": AIME2024Dataset,
     "circle-count": CircleCountDataset,
+    "circle-count-sft": CircleCountSFTDataset,
     "clevr-cogent": CLEVRCoGenTDataset,
     "daily-omni": DailyOmniDataset,
     "general-conversation-jsonl": GeneralConversationsJsonlDataset,
@@ -99,6 +103,7 @@ __all__ = [
     "AIME2024Dataset",
     "CLEVRCoGenTDataset",
     "CircleCountDataset",
+    "CircleCountSFTDataset",
     "DailyOmniDataset",
     "GeneralConversationsJsonlDataset",
     "DAPOMath17KDataset",
