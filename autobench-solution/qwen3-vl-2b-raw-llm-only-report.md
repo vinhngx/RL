@@ -137,7 +137,9 @@ green 17/29, orange 17/29, pink 16/21, purple 17/25, red 16/29, and yellow
 mean was 4.865, for a smaller +0.117 signed bias. All 512 calls terminated
 naturally with no truncation; 510 responses used only six or seven generated
 tokens, and all 512 answers parsed successfully. The recorded request for every
-example contained exactly one input image and one question.
+example contained exactly one input image and one question. A byte-string
+multiset comparison confirmed that all 512 recorded request images exactly
+matched the image data URLs in the locked final source records.
 
 A post-lock audit of the blind responses found mean absolute count error
 0.5625, with 126 overcounts, 89 undercounts, and 297 exact predictions. Exact
