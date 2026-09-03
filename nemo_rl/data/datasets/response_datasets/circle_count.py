@@ -65,10 +65,13 @@ def format_circle_count_dataset(datum_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 class CircleCountSFTDataset(RawDataset):
-    """SFT rows for the circle-count task: messages already in final form.
+    """SFT rows for the circle-count task.
 
     Emitted by /brev/circle-count-gym/gen_sft.py (image data URL + gym system
-    prompt + templated assistant answer ending in \\boxed{N}).
+    prompt + templated assistant answer ending in \\boxed{N}). Rows are kept as
+    raw JSON strings (the messages column mixes str and list content, which
+    Arrow cannot type); `format_circle_count_sft_dataset` parses them in the
+    sft_processor hook.
 
     Args:
         data_path: Path to the SFT JSONL.
@@ -76,16 +79,20 @@ class CircleCountSFTDataset(RawDataset):
 
     def __init__(self, data_path: str, **kwargs):
         self.task_name = "circle-count-sft"
-        rows = []
         with open(data_path) as f:
-            for line in f:
-                rows.append(json.loads(line))
+            raw_lines = [line for line in f]
         self.dataset = Dataset.from_dict(
             {
-                "messages": [r["messages"] for r in rows],
-                "task_name": [self.task_name] * len(rows),
+                "raw": raw_lines,
+                "task_name": [self.task_name] * len(raw_lines),
             }
         )
+
+
+def format_circle_count_sft_dataset(datum_dict: dict[str, Any]) -> dict[str, Any]:
+    """Parse a raw circle-count SFT JSONL row into {"messages": [...]} form."""
+    row = json.loads(datum_dict["raw"])
+    return {"messages": row["messages"], "task_name": datum_dict["task_name"]}
 
 
 class CircleCountDataset(RawDataset):
