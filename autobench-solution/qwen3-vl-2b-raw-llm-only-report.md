@@ -12,9 +12,9 @@ The selected checkpoint scored **61.33% (157/256)** on the frozen raw-image
 validation split, improving the fresh retained-2B baseline of **56.25%
 (144/256)** by 5.08 percentage points. It was produced by keeping the language
 decoder frozen while adapting the vision encoder and projector, first on the
-natural task distribution and then briefly on an independent raw-image
-curriculum weighted toward counts 6--14. The winning checkpoint was step 12 of
-the latter continuation.
+natural task distribution and then briefly on a raw-image curriculum weighted
+toward counts 6--14. The winning checkpoint was step 12 of the latter
+continuation.
 
 The selected policy was evaluated exactly once on the untouched 512-example
 blind split and scored **58.01% (297/512)**. All examples were processed, and
@@ -69,6 +69,12 @@ The 256-example validation split was reused for controlled comparisons. The
 prompt selection, decoding selection, and checkpoint selection. It was
 reserved for one final evaluation after those choices were locked.
 
+An exact-image audit found no overlap between any selected training set and
+either held-out split, nor between validation and blind final. The 480-example
+balanced training set and 408-example high-count curriculum did share eight
+images; this reuse is confined to training and is reported here for
+reproducibility.
+
 ## Research Findings
 
 The useful intervention was visual-side specialization without changing the
@@ -108,7 +114,18 @@ green 17/29, orange 17/29, pink 16/21, purple 17/25, red 16/29, and yellow
 28/43. On blind final, the expected-count mean was 4.748 and the prediction
 mean was 4.865, for a smaller +0.117 signed bias. All 512 calls terminated
 naturally with no truncation; 510 responses used only six or seven generated
-tokens.
+tokens, and all 512 answers parsed successfully. The recorded request for every
+example contained exactly one input image and one question.
+
+A post-lock audit of the blind responses found mean absolute count error
+0.5625, with 126 overcounts, 89 undercounts, and 297 exact predictions. Exact
+accuracy by expected count was 75.0% at 0, 87.5% at 1, 86.8% at 2, 71.4% at
+3, 60.0% at 4, 52.5% at 5, 50.0% at 6, 33.3% at 7, 22.6% at 8, and 21.4%
+at 9. Counts 10--14 had only 36 examples in total, so their individual rates
+are too noisy to interpret. By target color, exact accuracy ranged from 43.9%
+for red to 65.7% for orange. Together with the uniformly short, naturally
+terminated outputs, this points to dense visual counting—not response parsing
+or verbosity—as the principal remaining bottleneck.
 
 ### Requested full-SFT batch-128/200-step trial
 
@@ -135,8 +152,8 @@ step 1 and 57.81% at step 2. Full SFT was therefore rejected.
    steps on balanced, unmodified raw images at LR 8e-7.
 3. Continue from step 24 for 8 selected steps on independent natural raw images
    at LR 2e-7.
-4. Continue from that checkpoint for 12 selected steps on independent raw
-   examples weighted toward target counts 6--14 at LR 1e-7.
+4. Continue from that checkpoint for 12 selected steps on raw examples weighted
+   toward target counts 6--14 at LR 1e-7.
 5. Keep the original answer-first prompt and temperature 1.0; select by frozen
    exact accuracy, not by SFT loss.
 
@@ -176,10 +193,12 @@ remain only in the ignored `.env` and are not included in Git history.
 
 ## Limitations
 
-Accuracy is 61.33% on frozen validation and 58.01% on blind final, and residual errors are
-spread across colors rather than isolated to one palette entry. The result is
-specific to this synthetic circle-count distribution and single-sample
+Accuracy is 61.33% on frozen validation and 58.01% on blind final, and residual
+errors are spread across colors rather than isolated to one palette entry. The
+result is specific to this synthetic circle-count distribution and single-sample
 temperature-1.0 decoding. The campaign evaluates stochastic decoding on one
 fixed validation pass per candidate, so small one-example differences warrant
-caution. The strict raw-only contract deliberately forgoes the much larger
-gain available from deterministic task-specific image normalization.
+caution. Wilson 95% intervals are 55.24--67.08% for validation and
+53.69--62.21% for blind final. The strict raw-only contract deliberately
+forgoes the much larger gain available from deterministic task-specific image
+normalization.
