@@ -205,6 +205,9 @@ The full-SFT configuration is
 `autoresearch/qwen3_vl_circle_count/sft_2b_full_b128_200_v05.yaml`. The retained
 visual-side configurations and launchers are in the same directory. Credentials
 remain only in the ignored `.env` and are not included in Git history.
+The colocated `filter_target_color.py` belongs only to the earlier, explicitly
+ineligible processed-image study and is not part of this recipe or inference
+path.
 
 ## W&B Runs
 
