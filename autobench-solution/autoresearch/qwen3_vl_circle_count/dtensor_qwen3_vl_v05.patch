@@ -1,0 +1,17 @@
+diff --git a/nemo_rl/models/policy/utils.py b/nemo_rl/models/policy/utils.py
+--- a/nemo_rl/models/policy/utils.py
++++ b/nemo_rl/models/policy/utils.py
+@@ -52,5 +52,6 @@ AUTOMODEL_FACTORY: Dict[str, Any] = {
+     "qwen2_5_vl": AutoModelForImageTextToText,
+     "qwen2_vl": AutoModelForImageTextToText,
++    "qwen3_vl": AutoModelForImageTextToText,
+     "qwen2_5_omni": AutoModelForTextToWaveform,
+     "llava": AutoModelForImageTextToText,
+     "internvl": AutoModelForImageTextToText,
+@@ -65,5 +66,6 @@ if NEMO_AUTOMODEL_AVAILABLE:
+         "qwen2_5_vl": NeMoAutoModelForImageTextToText,
+         "qwen2_vl": NeMoAutoModelForImageTextToText,
++        "qwen3_vl": NeMoAutoModelForImageTextToText,
+         "qwen2_5_omni": NeMoAutoModelForTextToWaveform,
+         "llava": NeMoAutoModelForImageTextToText,
+         "internvl": NeMoAutoModelForImageTextToText,
