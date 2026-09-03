@@ -17,9 +17,11 @@ bfloat16 autocast.
 
 | Recipe | Microbatch | Result | Peak/steady memory | One-step time |
 | --- | ---: | --- | ---: | ---: |
-| Full SFT, no activation checkpointing | 1 | Stable | about 36.2 GiB | Incomplete after 11 min |
+| Full SFT, no activation checkpointing | 1 | OOM on step 2 | 44.37/44.42 GiB | 1,893.05s training on step 1 |
 | Full SFT, no activation checkpointing | 2 | OOM in backward | 44.16/44.42 GiB | n/a |
 | Full SFT, activation checkpointing | 2 | Stable but slower | about 30.6 GiB | Incomplete after 18 min |
+| Full SFT, activation checkpointing | 4 | Sustained training | about 28.23 GiB before backward peak | Boundary probe stopped early |
+| Full SFT, activation checkpointing | 8 | OOM in backward | 43.23/44.42 GiB | n/a |
 | All-linear LoRA | 4 | OOM in forward | 44.40/44.42 GiB | n/a |
 | Attention LoRA, raw images | 3 | Stable | about 39.35 GiB | 1,854.60s |
 | Attention LoRA, processor `max_pixels=512^2` | 4 | OOM in backward | 44.35/44.42 GiB | n/a |
@@ -68,9 +70,17 @@ improve on full SFT's 47--48%. LoRA reduces trainable state and permits a
 larger microbatch, but fixed-global-batch throughput stays flat because the
 base model's forward/backward work and this DTensor path dominate.
 
-The requested full-SFT campaign was therefore launched from the original HF
-checkpoint with global batch 128, microbatch 1, and 200 configured steps. Its
-configuration is
-`autoresearch/qwen3_vl_circle_count/vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-b128-200.v1.yaml`.
-The allocation-limited result, losses, and retained checkpoint will be added
-after the five-hour run terminates.
+The initial requested full-SFT campaign used global batch 128 and microbatch 1.
+Step 1 completed with training loss 0.3208 and validation loss 0.27645; training
+took 1,893.05 seconds, validation 231.41 seconds, and checkpointing 52.52
+seconds. Its 8.0-GiB weights checkpoint is retained under the `/ephemeral`
+campaign directory. Step 2 then OOMed in forward at 44.37/44.42 GiB, proving
+that the apparent one-step mb1 feasibility did not survive validation and
+checkpoint transitions.
+
+Activation checkpointing was therefore enabled and the global-batch-128
+divisors were searched upward. Microbatch 8 OOMed in backward while requesting
+4.69 GiB with 43.23 GiB already in use. Microbatch 4 is the selected upper
+candidate and the 200-step campaign configuration is
+`autoresearch/qwen3_vl_circle_count/vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-ac-b128-mb4-200.v1.yaml`.
+Its allocation-limited result will be added after the run terminates.
