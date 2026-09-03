@@ -36,7 +36,7 @@ The standard processor-side 512-pixel cap did not improve the measured path:
 its step differed from the raw-input trial by only 5.19 seconds (0.28%) and
 used the same memory. It is therefore omitted from the selected recipe.
 
-## Selected Campaign Recipe
+## Best Stable LoRA Recipe
 
 - Original `Qwen/Qwen3-VL-2B-Instruct` Hugging Face weights.
 - DTensor/FSDP2, tensor parallel 1, no activation checkpointing.
@@ -54,12 +54,23 @@ roughly nine training steps at the measured rate. The configuration retains
 all 200 requested steps, with frequent checkpoints so an allocation-limited
 run produces resumable weights.
 
-The exact selected configuration is
+The exact LoRA configuration is
 `autoresearch/qwen3_vl_circle_count/vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor-lora-attn-b126-mb3-200.v1.yaml`.
 Large assets, logs, and checkpoints live under `/ephemeral`, which is a symlink
 to `/data/ephemeral`.
 
-## Campaign Result
+## Decision and Campaign
 
-Campaign execution is in progress. This section will be updated with completed
-steps, loss, checkpoints, and the terminal W&B run before final handoff.
+LoRA was rejected as the final campaign choice. Its completed 1,854.60-second
+step is effectively the same duration as the previously measured full-update
+steps (about 1,866--1,880 seconds), and its 45--46% SM utilization does not
+improve on full SFT's 47--48%. LoRA reduces trainable state and permits a
+larger microbatch, but fixed-global-batch throughput stays flat because the
+base model's forward/backward work and this DTensor path dominate.
+
+The requested full-SFT campaign was therefore launched from the original HF
+checkpoint with global batch 128, microbatch 1, and 200 configured steps. Its
+configuration is
+`autoresearch/qwen3_vl_circle_count/vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-b128-200.v1.yaml`.
+The allocation-limited result, losses, and retained checkpoint will be added
+after the five-hour run terminates.
