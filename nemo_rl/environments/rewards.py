@@ -49,6 +49,21 @@ def math_expression_reward(
     return 0.0, False
 
 
+def boxed_numeric_reward(
+    ground_truth: str, response: str
+) -> tuple[float, Optional[bool]]:
+    """Reward the agent when the integer inside \\boxed{N} matches the ground truth.
+
+    Mirrors the circle_count NeMo-Gym verifier
+    (3rdparty/Gym-workspace/Gym/resources_servers/circle_count/app.py), which
+    matches `\\boxed{(\\d+)}`.
+    """
+    match = re.search(r"\\boxed\{(\d+)\}", response)
+    if match:
+        return (1.0, True) if int(match.group(1)) == int(ground_truth) else (0.0, False)
+    return 0.0, False
+
+
 def format_reward(
     ground_truth: str,
     response: str,

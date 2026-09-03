@@ -1,0 +1,67 @@
+# SFT on synthetic circle-count data for Qwen/Qwen3-VL-2B-Instruct.
+# Recipe per user: from the original checkpoint, dtensor backend, BS=128, 200 steps.
+defaults:
+  - sft.yaml
+
+sft:
+  max_num_epochs: 2
+  max_num_steps: 200
+  val_period: 20
+  val_batches: 2
+  val_global_batch_size: 64
+  val_micro_batch_size: 1
+  val_at_start: false
+  val_at_end: true
+
+policy:
+  model_name: "Qwen/Qwen3-VL-2B-Instruct"
+  tokenizer:
+    name: ${policy.model_name}
+    chat_template: null
+  train_global_batch_size: 128
+  train_micro_batch_size: 2
+  max_total_sequence_length: 2048
+  precision: "bfloat16"
+  sequence_packing:
+    enabled: False
+  dtensor_cfg:
+    activation_checkpointing: true
+    lora_cfg:
+      enabled: true
+  optimizer:
+    kwargs:
+      lr: 1.0e-04
+
+checkpointing:
+  enabled: true
+  checkpoint_dir: /brev/circle-count-gym/ckpts-sft/${policy.model_name}
+  metric_name: "val:val_loss"
+  higher_is_better: false
+  keep_top_k: 3
+  save_period: 50
+  save_optimizer: false
+
+data:
+  max_input_seq_length: 2048
+  add_bos: true
+  add_eos: true
+  add_generation_prompt: false
+  train:
+    dataset_name: circle-count-sft
+    data_path: /brev/circle-count-gym/data/sft-train.jsonl
+  validation:
+    dataset_name: circle-count-sft
+    data_path: /brev/circle-count-gym/data/sft-val.jsonl
+  default:
+    processor: sft_processor
+    prompt_file: null
+
+logger:
+  log_dir: "/brev/circle-count-gym/results/sft/nrl-logs"
+  wandb_enabled: false
+  tensorboard_enabled: false
+  monitor_gpus: false
+
+cluster:
+  gpus_per_node: 1
+  num_nodes: 1

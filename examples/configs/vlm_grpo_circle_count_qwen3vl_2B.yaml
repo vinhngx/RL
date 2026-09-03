@@ -1,0 +1,71 @@
+# GRPO on the circle-count task for Qwen/Qwen3-VL-2B-Instruct.
+# Uses a native NeMo-RL env (nemo_rl/environments/vlm_environment.py with the
+# boxed_numeric reward) that mirrors the NeMo-Gym circle_count verifier 1:1
+# (same images, prompt text, boxed parser, binary exact-count reward), because
+# VLM+gym rollout plumbing only exists on main while this host's driver cannot
+# run main's CUDA 13 stack.
+defaults: "grpo_math_1B.yaml"
+
+grpo:
+  num_prompts_per_step: 8
+  num_generations_per_prompt: 16
+  val_period: 5
+  max_val_samples: 128
+  val_batch_size: 32
+  val_at_end: true
+
+checkpointing:
+  checkpoint_dir: /brev/circle-count-gym/ckpts/circlecount_${policy.model_name}
+
+policy:
+  model_name: Qwen/Qwen3-VL-2B-Instruct
+  train_global_batch_size: 128
+  train_micro_batch_size: 1
+  logprob_batch_size: 2
+  max_total_sequence_length: 2048
+  dynamic_batching:
+    enabled: true
+  sequence_packing:
+    enabled: false
+  dtensor_cfg:
+    lora_cfg:
+      enabled: true
+  optimizer:
+    kwargs:
+      lr: 1.0e-04
+  generation:
+    max_new_tokens: 640
+    vllm_cfg:
+      skip_tokenizer_init: false
+    vllm_kwargs:
+      mm_processor_cache_gb: 0
+
+data:
+  max_input_seq_length: 2048
+  shuffle: true
+  train:
+    dataset_name: circle-count
+    data_path: /brev/circle-count-gym/data/train-easy.jsonl
+    split_validation_size: 0
+  validation:
+    dataset_name: circle-count
+    data_path: /brev/circle-count-gym/data/val.jsonl
+  default:
+    prompt_file: examples/prompts/circle_count_boxed.txt
+    processor: vlm_hf_data_processor
+    env_name: circle-count
+
+env:
+  circle-count:
+    num_workers: 8
+    reward_functions:
+    - name: boxed_numeric
+      weight: 1.0
+
+logger:
+  tensorboard_enabled: false
+  wandb_enabled: false
+  monitor_gpus: false
+
+cluster:
+  gpus_per_node: 1

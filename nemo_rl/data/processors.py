@@ -149,6 +149,12 @@ def sft_processor(
 ) -> DatumSpec:
     """Process a datum dictionary for SFT training."""
     # optional preprocessor
+    if datum_dict["task_name"] == "circle-count-sft":
+        from nemo_rl.data.datasets.response_datasets.circle_count import (
+            format_circle_count_sft_dataset,
+        )
+
+        datum_dict = format_circle_count_sft_dataset(datum_dict)
     if datum_dict["task_name"] == "clevr-cogent":
         from nemo_rl.data.datasets.response_datasets.clevr import (
             format_clevr_cogent_dataset,
@@ -468,7 +474,13 @@ def vlm_hf_data_processor(
     )
 
     # depending on the task, format the data differently
-    if datum_dict["task_name"] == "clevr-cogent":
+    if datum_dict["task_name"] == "circle-count":
+        from nemo_rl.data.datasets.response_datasets.circle_count import (
+            format_circle_count_dataset,
+        )
+
+        datum_dict = format_circle_count_dataset(datum_dict)
+    elif datum_dict["task_name"] == "clevr-cogent":
         datum_dict = format_clevr_cogent_dataset(datum_dict)
     elif datum_dict["task_name"] == "refcoco":
         datum_dict = format_refcoco_dataset(datum_dict)

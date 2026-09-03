@@ -19,6 +19,10 @@ from nemo_rl.data.datasets.response_datasets.aime import AIMEDataset
 from nemo_rl.data.datasets.response_datasets.arrow_text_dataset import ArrowTextDataset
 from nemo_rl.data.datasets.response_datasets.audiomcq import AudioMCQDataset
 from nemo_rl.data.datasets.response_datasets.avqa import AVQADataset
+from nemo_rl.data.datasets.response_datasets.circle_count import (
+    CircleCountDataset,
+    CircleCountSFTDataset,
+)
 from nemo_rl.data.datasets.response_datasets.clevr import CLEVRCoGenTDataset
 from nemo_rl.data.datasets.response_datasets.daily_omni import DailyOmniDataset
 from nemo_rl.data.datasets.response_datasets.dapo_math import (
@@ -67,6 +71,8 @@ DATASET_REGISTRY = {
     "AIME2024": partial(AIMEDataset, variant="2024"),
     "AIME2025": partial(AIMEDataset, variant="2025"),
     "AIME2026": partial(AIMEDataset, variant="2026"),
+    "circle-count": CircleCountDataset,
+    "circle-count-sft": CircleCountSFTDataset,
     "clevr-cogent": CLEVRCoGenTDataset,
     "daily-omni": DailyOmniDataset,
     "general-conversation-jsonl": GeneralConversationsJsonlDataset,
@@ -147,6 +153,8 @@ __all__ = [
     "AVQADataset",
     "AIMEDataset",
     "CLEVRCoGenTDataset",
+    "CircleCountDataset",
+    "CircleCountSFTDataset",
     "DailyOmniDataset",
     "GeneralConversationsJsonlDataset",
     "DAPOMath17KDataset",
