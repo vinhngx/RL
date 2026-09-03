@@ -105,7 +105,10 @@ was chosen by exact Gym accuracy.
 The selected validation checkpoint had signed count error +0.176 and mean
 absolute error 0.520. Its per-color exact counts were blue 23/45, cyan 23/35,
 green 17/29, orange 17/29, pink 16/21, purple 17/25, red 16/29, and yellow
-28/43.
+28/43. On blind final, the expected-count mean was 4.748 and the prediction
+mean was 4.865, for a smaller +0.117 signed bias. All 512 calls terminated
+naturally with no truncation; 510 responses used only six or seven generated
+tokens.
 
 ### Requested full-SFT batch-128/200-step trial
 
@@ -114,12 +117,13 @@ global batch 128, microbatch 1, 200 optimizer steps, 100 two-step epochs, LR
 1e-7, and cosine decay. It warm-started from the selected step-12 weights.
 Validation and weights-only saving were scheduled every step to retain useful
 evidence within the fixed campaign window. The updates ran without OOM, with
-observed device memory reaching about 20.4 GB. First-step policy training took
-1,865.78 seconds; validation and checkpointing brought total step time to 2,119.17
-seconds. At that measured rate, 200 steps require about 103.7 training hours,
-or 117.7 hours with every-step validation and saving, on one L40S. The fixed
-campaign therefore treats this as a measured feasibility trial rather than
-claiming the 200-step schedule completed. Two updates were completed. Training
+observed device memory reaching about 20.4 GB. The two policy updates took
+1,865.78 and 1,880.29 seconds; validation and checkpointing brought total step
+times to 2,119.17 and 2,126.17 seconds. At their mean measured rate, 200 steps
+require about 104.1 training hours, or 117.9 hours with every-step validation
+and saving, on one L40S. The fixed campaign therefore treats this as a measured
+feasibility trial rather than claiming the 200-step schedule completed. Two
+updates were completed. Training
 loss fell from 0.1101 to 0.0881 and SFT validation loss from 0.1242 to 0.1235,
 but exact Gym accuracy fell from the 61.33% starting checkpoint to 59.77% at
 step 1 and 57.81% at step 2. Full SFT was therefore rejected.
