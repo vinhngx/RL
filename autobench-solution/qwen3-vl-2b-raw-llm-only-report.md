@@ -164,8 +164,8 @@ times to 2,119.17 and 2,126.17 seconds. At their mean measured rate, 200 steps
 require about 104.1 training hours, or 117.9 hours with every-step validation
 and saving, on one L40S. The fixed campaign therefore treats this as a measured
 feasibility trial rather than claiming the 200-step schedule completed. Two
-updates were completed. Training
-loss fell from 0.1101 to 0.0881 and SFT validation loss from 0.1242 to 0.1235,
+updates were completed. Training loss fell from 0.1101 to 0.0881 and SFT
+validation loss from 0.1242 to 0.1235,
 but exact Gym accuracy fell from the 61.33% starting checkpoint to 59.77% at
 step 1 and 57.81% at step 2. Full SFT was therefore rejected.
 
