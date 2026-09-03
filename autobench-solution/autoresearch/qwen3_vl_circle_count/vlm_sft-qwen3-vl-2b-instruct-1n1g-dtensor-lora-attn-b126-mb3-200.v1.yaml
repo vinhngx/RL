@@ -1,0 +1,21 @@
+defaults: vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor-lora-attn-b128-mb2-200.v1.yaml
+
+# Largest stable microbatch measured on one 44.42-GiB L40S. Microbatch 4
+# reached 44.35 GiB and OOMed during backward; microbatch 3 used 39.35 GiB.
+# DTensor requires the global batch to be divisible by the microbatch.
+policy:
+  train_global_batch_size: 126
+  train_micro_batch_size: 3
+
+# One update takes about 31 minutes on this stack. Save and validate frequently
+# enough to retain useful intermediate weights during a five-hour allocation.
+sft:
+  val_period: 5
+
+checkpointing:
+  save_period: 5
+
+logger:
+  wandb:
+    project: qwen3-vl-circle-count-autoresearch
+    name: sft-2b-lora-attn-b126-mb3-200-dtensor
