@@ -7,6 +7,8 @@
 defaults: "grpo_math_1B.yaml"
 
 grpo:
+  use_dynamic_sampling: true
+  dynamic_sampling_max_gen_batches: 4
   num_prompts_per_step: 8
   num_generations_per_prompt: 16
   val_period: 5
@@ -32,7 +34,7 @@ policy:
       enabled: true
   optimizer:
     kwargs:
-      lr: 1.0e-04
+      lr: 5.0e-05
   generation:
     max_new_tokens: 640
     vllm_cfg:
@@ -45,7 +47,7 @@ data:
   shuffle: true
   train:
     dataset_name: circle-count
-    data_path: /brev/circle-count-gym/data/train-easy.jsonl
+    data_path: /brev/circle-count-gym/data/train.jsonl
     split_validation_size: 0
   validation:
     dataset_name: circle-count
