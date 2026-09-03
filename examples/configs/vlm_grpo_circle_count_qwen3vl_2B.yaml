@@ -32,7 +32,7 @@ policy:
       enabled: true
   optimizer:
     kwargs:
-      lr: 1.0e-04
+      lr: 5.0e-05
   generation:
     max_new_tokens: 640
     vllm_cfg:
@@ -45,7 +45,7 @@ data:
   shuffle: true
   train:
     dataset_name: circle-count
-    data_path: /brev/circle-count-gym/data/train-easy.jsonl
+    data_path: /brev/circle-count-gym/data/train-hard.jsonl
     split_validation_size: 0
   validation:
     dataset_name: circle-count
