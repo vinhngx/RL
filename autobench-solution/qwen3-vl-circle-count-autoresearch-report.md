@@ -1,5 +1,10 @@
 # Qwen3-VL Circle Count Auto-Research Report
 
+> Scope note: this earlier result uses RGB masking, connected-component
+> detection, and grid redrawing. It does **not** satisfy the later raw-image,
+> single-model-call constraint. See `qwen3-vl-2b-raw-llm-only-report.md` for the
+> eligible Qwen3-VL-2B solution.
+
 ## Outcome
 
 This fresh ten-hour campaign improved `Qwen/Qwen3-VL-2B-Instruct` from the
