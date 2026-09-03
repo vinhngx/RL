@@ -1,0 +1,18 @@
+defaults: vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor-lora-attn-b128-mb2-200.v1.yaml
+
+policy:
+  tokenizer:
+    name: ${policy.model_name}
+    chat_template: default
+    chat_template_kwargs:
+      enable_thinking: false
+    # Standard Qwen processor resizing; the input remains the original raw image.
+    tokenizer_kwargs:
+      max_pixels: 262144  # 512 * 512
+  train_global_batch_size: 128
+  train_micro_batch_size: 8
+
+logger:
+  wandb:
+    project: qwen3-vl-circle-count-autoresearch
+    name: sft-2b-lora-attn-512px-b128-mb8-200-dtensor
