@@ -1,0 +1,14 @@
+defaults: vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-b128-200.v1.yaml
+
+# Cross-step-safe candidate on one 44.42-GiB L40S. Larger divisors all OOM:
+# mb8 during step-1 backward, and mb4/mb2 during step-2 forward after Adam
+# state materializes. Activation checkpointing supplies the remaining margin.
+policy:
+  train_micro_batch_size: 1
+  dtensor_cfg:
+    activation_checkpointing: true
+
+logger:
+  wandb:
+    project: qwen3-vl-circle-count-autoresearch
+    name: sft-2b-full-ac-b128-mb1-200-dtensor
