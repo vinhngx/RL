@@ -10,11 +10,12 @@ OCR, multi-call voting, or answer aggregation.
 
 The selected checkpoint scored **61.33% (157/256)** on the frozen raw-image
 validation split, improving the fresh retained-2B baseline of **56.25%
-(144/256)** by 5.08 percentage points. It was produced by keeping the language
-decoder frozen while adapting the vision encoder and projector, first on the
-natural task distribution and then briefly on a raw-image curriculum weighted
-toward counts 6--14. The winning checkpoint was step 12 of the latter
-continuation.
+(144/256)** by 5.08 percentage points in the selection pass. Three post-lock
+replications put the four-pass mean at **58.98%**, exposing meaningful sampling
+variance. The checkpoint was produced by keeping the language decoder frozen
+while adapting the vision encoder and projector, first on the natural task
+distribution and then briefly on a raw-image curriculum weighted toward counts
+6--14. The winning checkpoint was step 12 of the latter continuation.
 
 The selected policy was evaluated exactly once on the untouched 512-example
 blind split and scored **58.01% (297/512)**. All examples were processed, and
@@ -108,6 +109,27 @@ was chosen by exact Gym accuracy.
 | Full SFT batch 128, step 2 | 57.81% (148/256) | Discard |
 | Selected policy, blind final | **58.01% (297/512)** | Final |
 
+On the paired 256-example validation set, the selected checkpoint fixed 29
+baseline errors while regressing 16 baseline-correct examples; 128 examples
+were correct under both and 83 were wrong under both. The corresponding exact
+two-sided McNemar p-value is 0.0725, so the measured 13-example gain is useful
+selection evidence but not a high-confidence claim of a general improvement.
+
+After model and final-result lock, three additional validation passes using the
+same checkpoint, answer-first prompt, and temperature but seeds 43--45 scored
+59.38% (152/256), 57.03% (146/256), and 58.20% (149/256). Including the
+61.33% selection pass at seed 42, the four-pass mean is 58.98%, with a
+1.83-percentage-point sample standard deviation and 57.03--61.33% range. These
+replications characterize stochastic decoding variance; they did not reopen
+checkpoint selection or touch blind final again.
+
+A post-lock same-seed control reran the retained baseline at seed 43: it scored
+52.73% (135/256), versus 59.38% (152/256) for the selected checkpoint. On that
+pass the selected checkpoint fixed 32 baseline errors and regressed 15
+baseline-correct examples (exact two-sided McNemar p=0.0186). Thus the selected
+model beat the baseline by 5.08 and 6.64 percentage points in the two matched
+seed-42 and seed-43 comparisons, even though absolute scores varied.
+
 The selected validation checkpoint had signed count error +0.176 and mean
 absolute error 0.520. Its per-color exact counts were blue 23/45, cyan 23/35,
 green 17/29, orange 17/29, pink 16/21, purple 17/25, red 16/29, and yellow
@@ -186,6 +208,10 @@ remain only in the ignored `.env` and are not included in Git history.
 
 - [Selected high-count visual-side training](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/vy3qkzhf)
 - [Selected checkpoint validation](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/us0lpbfr)
+- [Post-lock validation seed 43](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/5rt00nuo)
+- [Post-lock validation seed 44](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/gnrrfbsb)
+- [Post-lock validation seed 45](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/4ewgkok4)
+- [Post-lock baseline seed 43](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/npuqervf)
 - [Full-SFT batch-128/200-step trial](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/3m4qbr6f)
 - [Full-SFT step-1 evaluation](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/g18fov8v)
 - [Full-SFT step-2 evaluation](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/k9cwa4c8)
@@ -198,7 +224,8 @@ errors are spread across colors rather than isolated to one palette entry. The
 result is specific to this synthetic circle-count distribution and single-sample
 temperature-1.0 decoding. The campaign evaluates stochastic decoding on one
 fixed validation pass per candidate, so small one-example differences warrant
-caution. Wilson 95% intervals are 55.24--67.08% for validation and
+caution; post-lock replications quantify this variance for the selected model.
+Wilson 95% intervals are 55.24--67.08% for the selected validation pass and
 53.69--62.21% for blind final. The strict raw-only contract deliberately
 forgoes the much larger gain available from deterministic task-specific image
 normalization.
