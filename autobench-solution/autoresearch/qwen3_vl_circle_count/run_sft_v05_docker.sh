@@ -26,6 +26,7 @@ DATA_ROOT="${DATA_ROOT:-${CAMPAIGN_ROOT}/data}"
 SFT_DATA_ROOT="${EXP_DIR}/sft-data"
 MEGATRON_ARTIFACT_ROOT="${MEGATRON_ARTIFACT_ROOT:-${CAMPAIGN_ROOT}/model-artifacts/megatron}"
 CONFIG_PATH="${CONFIG_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/sft_v05.yaml}"
+CONFIG_PARENT_PATH="${CONFIG_PARENT_PATH:-}"
 PATCH_PATH="${PATCH_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/vllm_input_image_v05.patch}"
 CONTINUATION_PATCH_PATH="${CONTINUATION_PATCH_PATH:-}"
 BACKEND_PATCH_PATH="${BACKEND_PATCH_PATH:-}"
@@ -48,6 +49,10 @@ if [[ -n "$CONTINUATION_PATCH_PATH" && ! -f "$CONTINUATION_PATCH_PATH" ]]; then
 fi
 if [[ -n "$BACKEND_PATCH_PATH" && ! -f "$BACKEND_PATCH_PATH" ]]; then
     echo "Error: backend patch is missing: $BACKEND_PATCH_PATH" >&2
+    exit 1
+fi
+if [[ -n "$CONFIG_PARENT_PATH" && ! -f "$CONFIG_PARENT_PATH" ]]; then
+    echo "Error: parent config is missing: $CONFIG_PARENT_PATH" >&2
     exit 1
 fi
 if [[ -n "$PRETRAINED_CHECKPOINT_PATH" && ! -d "$PRETRAINED_CHECKPOINT_PATH" ]]; then
@@ -113,6 +118,11 @@ if [[ -n "$BACKEND_PATCH_PATH" ]]; then
     backend_patch_mount_args=(-v "$BACKEND_PATCH_PATH:/compat/backend_v05.patch:ro")
     backend_patch_command="patch --forward --batch -p1 < /compat/backend_v05.patch"
 fi
+config_parent_mount_args=()
+if [[ -n "$CONFIG_PARENT_PATH" ]]; then
+    config_parent_name="$(basename "$CONFIG_PARENT_PATH")"
+    config_parent_mount_args=(-v "$CONFIG_PARENT_PATH:/opt/nemo-rl/examples/configs/recipes/vlm/$config_parent_name:ro")
+fi
 
 docker run --rm \
     --name "$CONTAINER_NAME" \
@@ -124,6 +134,7 @@ docker run --rm \
     -v "$EXP_DIR:/runstate" \
     -v "$MEGATRON_ARTIFACT_ROOT:/model-artifacts" \
     -v "$CONFIG_PATH:/opt/nemo-rl/examples/configs/recipes/vlm/qwen3_vl_circle_count_sft.yaml:ro" \
+    "${config_parent_mount_args[@]}" \
     -v "$PATCH_PATH:/compat/qwen3_vl_v05.patch:ro" \
     "${continuation_patch_mount_args[@]}" \
     "${backend_patch_mount_args[@]}" \
