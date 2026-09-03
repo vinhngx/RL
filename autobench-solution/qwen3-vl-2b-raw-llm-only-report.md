@@ -12,10 +12,11 @@ The selected checkpoint scored **61.33% (157/256)** on the frozen raw-image
 validation split, improving the fresh retained-2B baseline of **56.25%
 (144/256)** by 5.08 percentage points in the selection pass. Three post-lock
 replications put the four-pass mean at **58.98%**, exposing meaningful sampling
-variance. The checkpoint was produced by keeping the language decoder frozen
-while adapting the vision encoder and projector, first on the natural task
-distribution and then briefly on a raw-image curriculum weighted toward counts
-6--14. The winning checkpoint was step 12 of the latter continuation.
+variance but remaining above the baseline's four-pass mean of **54.30%**. The
+checkpoint was produced by keeping the language decoder frozen while adapting
+the vision encoder and projector, first on the natural task distribution and
+then briefly on a raw-image curriculum weighted toward counts 6--14. The
+winning checkpoint was step 12 of the latter continuation.
 
 The selected policy was evaluated exactly once on the untouched 512-example
 blind split and scored **58.01% (297/512)**. All examples were processed, and
@@ -123,12 +124,13 @@ same checkpoint, answer-first prompt, and temperature but seeds 43--45 scored
 replications characterize stochastic decoding variance; they did not reopen
 checkpoint selection or touch blind final again.
 
-A post-lock same-seed control reran the retained baseline at seed 43: it scored
-52.73% (135/256), versus 59.38% (152/256) for the selected checkpoint. On that
-pass the selected checkpoint fixed 32 baseline errors and regressed 15
-baseline-correct examples (exact two-sided McNemar p=0.0186). Thus the selected
-model beat the baseline by 5.08 and 6.64 percentage points in the two matched
-seed-42 and seed-43 comparisons, even though absolute scores varied.
+Post-lock baseline replications at seeds 43--45 scored 52.73% (135/256),
+52.73% (135/256), and 55.47% (142/256). Across the four matched seeds 42--45,
+the selected model averaged 58.98% versus 54.30% for the retained baseline and
+was ahead on every pass, with gains from 2.73 to 6.64 percentage points and a
+mean gain of 4.69 points. On seed 43 specifically, the selected checkpoint
+fixed 32 baseline errors and regressed 15 baseline-correct examples (exact
+two-sided McNemar p=0.0186).
 
 The selected validation checkpoint had signed count error +0.176 and mean
 absolute error 0.520. Its per-color exact counts were blue 23/45, cyan 23/35,
@@ -217,6 +219,8 @@ path.
 - [Post-lock validation seed 44](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/gnrrfbsb)
 - [Post-lock validation seed 45](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/4ewgkok4)
 - [Post-lock baseline seed 43](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/npuqervf)
+- [Post-lock baseline seed 44](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/uw7mj36n)
+- [Post-lock baseline seed 45](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/efgx47uw)
 - [Full-SFT batch-128/200-step trial](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/3m4qbr6f)
 - [Full-SFT step-1 evaluation](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/g18fov8v)
 - [Full-SFT step-2 evaluation](https://wandb.ai/hwinf_dcm/qwen3-vl-circle-count-autoresearch/runs/k9cwa4c8)
