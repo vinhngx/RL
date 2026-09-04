@@ -31,7 +31,11 @@ BARE_COUNT = re.compile(r"^\s*(\d+)\s*$")
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=Path, required=True)
-    parser.add_argument("--adapter", type=Path, required=True)
+    parser.add_argument(
+        "--adapter",
+        type=Path,
+        help="Optional PEFT adapter; omit for a merged Hugging Face checkpoint.",
+    )
     parser.add_argument("--prompt-file", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", default="Qwen/Qwen3-VL-2B-Instruct")
@@ -92,7 +96,11 @@ def main() -> None:
         attn_implementation="sdpa",
         device_map="cuda",
     )
-    model = PeftModel.from_pretrained(base_model, args.adapter)
+    model = (
+        PeftModel.from_pretrained(base_model, args.adapter)
+        if args.adapter is not None
+        else base_model
+    )
     model.eval()
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
