@@ -20,12 +20,21 @@ diff --git a/nemo_rl/models/policy/utils.py b/nemo_rl/models/policy/utils.py
 diff --git a/3rdparty/Automodel-workspace/Automodel/nemo_automodel/components/distributed/parallelizer.py b/3rdparty/Automodel-workspace/Automodel/nemo_automodel/components/distributed/parallelizer.py
 --- a/3rdparty/Automodel-workspace/Automodel/nemo_automodel/components/distributed/parallelizer.py
 +++ b/3rdparty/Automodel-workspace/Automodel/nemo_automodel/components/distributed/parallelizer.py
-@@ -211,7 +211,7 @@ class DTensorParallelizer:
+@@ -211,7 +211,16 @@ class DTensorParallelizer:
                  pass  # transformers < 5.3.0, fall through to sub-module wrapping
  
              if _use_hf_native_grad_ckpt:
 -                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
 +                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
++                # Qwen3-VL's vision encoder receives frozen pixel inputs.  Make
++                # the patch-embedding output differentiable so checkpointed
++                # vision blocks retain gradients for their LoRA parameters.
++                visual = getattr(getattr(model, "model", None), "visual", None)
++                patch_embed = getattr(visual, "patch_embed", None)
++                if patch_embed is not None:
++                    patch_embed.register_forward_hook(
++                        lambda _module, _inputs, output: output.requires_grad_(True)
++                    )
              else:
                  for i, layer in enumerate(layers):
                      if hasattr(layer, "mlp"):
