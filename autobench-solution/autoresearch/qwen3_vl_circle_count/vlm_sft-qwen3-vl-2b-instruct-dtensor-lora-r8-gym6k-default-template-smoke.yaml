@@ -1,0 +1,49 @@
+defaults: vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-b128-200.v1.yaml
+
+# Serialization control: Qwen's native chat template emits the required vision
+# placeholder rather than serializing raw base64 image content into the prompt.
+sft:
+  max_num_epochs: 1
+  max_num_steps: 20
+  val_period: 10
+  val_batches: 2
+  val_global_batch_size: 64
+
+checkpointing:
+  save_period: 10
+
+policy:
+  tokenizer:
+    chat_template: default
+    chat_template_kwargs:
+      enable_thinking: false
+  train_micro_batch_size: 2
+  dtensor_cfg:
+    activation_checkpointing: true
+    lora_cfg:
+      enabled: true
+      target_modules: []
+      exclude_modules: []
+      match_all_linear: true
+      dim: 8
+      alpha: 32
+      dropout: 0.0
+      dropout_position: post
+      lora_A_init: xavier
+      use_triton: true
+  optimizer:
+    name: torch.optim.AdamW
+    kwargs:
+      lr: 1.0e-4
+      weight_decay: 0.1
+      betas: [0.9, 0.98]
+      eps: 1.0e-5
+      foreach: false
+      fused: false
+
+data:
+  add_bos: false
+
+logger:
+  wandb:
+    name: sft-2b-gym6k-default-template-smoke
