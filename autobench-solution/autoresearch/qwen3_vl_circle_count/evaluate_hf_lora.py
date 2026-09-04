@@ -41,6 +41,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default="Qwen/Qwen3-VL-2B-Instruct")
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--max-new-tokens", type=int, default=32)
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="Sampling temperature; zero selects deterministic greedy decoding.",
+    )
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--limit", type=int)
     return parser.parse_args()
 
@@ -82,6 +89,9 @@ def wilson_interval(correct: int, total: int) -> tuple[float, float]:
 
 def main() -> None:
     args = parse_args()
+    if args.temperature < 0:
+        raise ValueError("--temperature must be non-negative")
+    torch.manual_seed(args.seed)
     with args.data.open() as source:
         examples = [json.loads(line) for line in source]
     if args.limit is not None:
@@ -144,7 +154,8 @@ def main() -> None:
             ).to("cuda")
             generated = model.generate(
                 **inputs,
-                do_sample=False,
+                do_sample=args.temperature > 0,
+                temperature=args.temperature if args.temperature > 0 else None,
                 max_new_tokens=args.max_new_tokens,
                 use_cache=True,
             )
@@ -218,6 +229,8 @@ def main() -> None:
         "elapsed_seconds": elapsed,
         "batch_size": args.batch_size,
         "max_new_tokens": args.max_new_tokens,
+        "temperature": args.temperature,
+        "seed": args.seed,
         "by_expected_count": dict(sorted(by_count.items())),
         "by_target_color": dict(sorted(by_color.items())),
     }
