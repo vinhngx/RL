@@ -27,7 +27,7 @@ SFT_DATA_ROOT="${EXP_DIR}/sft-data"
 MEGATRON_ARTIFACT_ROOT="${MEGATRON_ARTIFACT_ROOT:-${CAMPAIGN_ROOT}/model-artifacts/megatron}"
 CONFIG_PATH="${CONFIG_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/sft_v05.yaml}"
 CONFIG_PARENT_PATH="${CONFIG_PARENT_PATH:-}"
-PATCH_PATH="${PATCH_PATH:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/vllm_input_image_v05.patch}"
+PATCH_PATH="${PATCH_PATH-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/vllm_input_image_v05.patch}"
 CONTINUATION_PATCH_PATH="${CONTINUATION_PATCH_PATH:-}"
 BACKEND_PATCH_PATH="${BACKEND_PATCH_PATH:-}"
 SYSTEM_PROMPT_FILE="${SYSTEM_PROMPT_FILE:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/prompt_answer_first.txt}"
@@ -37,12 +37,16 @@ IMAGE="${IMAGE:-nemo-rl:qwen3vl-smoke-cu129}"
 CONTAINER_NAME="${CONTAINER_NAME:-nemo-rl-qwen3-vl-circle-count-${EXPERIMENT}}"
 WANDB_MODE="${WANDB_MODE:-offline}"
 
-for required_path in "$DATA_ROOT/train.jsonl" "$DATA_ROOT/validation.jsonl" "$CONFIG_PATH" "$PATCH_PATH" "$SYSTEM_PROMPT_FILE"; do
+for required_path in "$DATA_ROOT/train.jsonl" "$DATA_ROOT/validation.jsonl" "$CONFIG_PATH" "$SYSTEM_PROMPT_FILE"; do
     if [[ ! -f "$required_path" ]]; then
         echo "Error: required file is missing: $required_path" >&2
         exit 1
     fi
 done
+if [[ -n "$PATCH_PATH" && ! -f "$PATCH_PATH" ]]; then
+    echo "Error: compatibility patch is missing: $PATCH_PATH" >&2
+    exit 1
+fi
 if [[ -n "$CONTINUATION_PATCH_PATH" && ! -f "$CONTINUATION_PATCH_PATH" ]]; then
     echo "Error: continuation patch is missing: $CONTINUATION_PATCH_PATH" >&2
     exit 1
@@ -118,6 +122,12 @@ if [[ -n "$BACKEND_PATCH_PATH" ]]; then
     backend_patch_mount_args=(-v "$BACKEND_PATCH_PATH:/compat/backend_v05.patch:ro")
     backend_patch_command="patch --forward --batch -p1 < /compat/backend_v05.patch"
 fi
+compat_patch_mount_args=()
+compat_patch_command=""
+if [[ -n "$PATCH_PATH" ]]; then
+    compat_patch_mount_args=(-v "$PATCH_PATH:/compat/qwen3_vl.patch:ro")
+    compat_patch_command="patch --forward --batch -p1 < /compat/qwen3_vl.patch"
+fi
 config_parent_mount_args=()
 if [[ -n "$CONFIG_PARENT_PATH" ]]; then
     config_parent_name="$(basename "$CONFIG_PARENT_PATH")"
@@ -135,7 +145,7 @@ docker run --rm \
     -v "$MEGATRON_ARTIFACT_ROOT:/model-artifacts" \
     -v "$CONFIG_PATH:/opt/nemo-rl/examples/configs/recipes/vlm/qwen3_vl_circle_count_sft.yaml:ro" \
     "${config_parent_mount_args[@]}" \
-    -v "$PATCH_PATH:/compat/qwen3_vl_v05.patch:ro" \
+    "${compat_patch_mount_args[@]}" \
     "${continuation_patch_mount_args[@]}" \
     "${backend_patch_mount_args[@]}" \
     "${checkpoint_mount_args[@]}" \
@@ -160,7 +170,7 @@ docker run --rm \
     -w /opt/nemo-rl \
     "$IMAGE" \
     bash -o pipefail -lc "
-patch --forward --batch -p1 < /compat/qwen3_vl_v05.patch
+$compat_patch_command
 $continuation_patch_command
 $backend_patch_command
 uv run python examples/run_vlm_sft.py \\

@@ -1,0 +1,20 @@
+defaults: vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-b128-200.v1.yaml
+
+# NeMo RL v0.6 campaign setting on one 44.42-GiB L40S. Microbatch 16
+# OOMs on step 2 and microbatch 8 OOMs on a longer-sequence batch at step 33;
+# microbatch 4 is the next valid global-batch-128 divisor.
+sft:
+  val_period: 10
+
+checkpointing:
+  save_period: 10
+
+policy:
+  train_micro_batch_size: 4
+  dtensor_cfg:
+    activation_checkpointing: true
+
+logger:
+  wandb:
+    project: qwen3-vl-circle-count-autoresearch
+    name: sft-2b-full-ac-b128-mb4-200-v06-dtensor
