@@ -36,7 +36,7 @@ volume. The selected W&B run is [vd6vw9v6](https://wandb.ai/hwinf_dcm/qwen3-vl-c
 | Schedule | 4-step linear warmup from 0.1x, then cosine decay |
 | Horizon | 200 optimizer steps |
 | Validation / checkpoints | every 10 steps; retain best 2 adapters plus final state |
-| Data | 87,599 synthetic train and 10,570 validation examples |
+| Data | 256 synthetic train and 256 validation examples, reused across epochs |
 
 The runnable child config is
 `autoresearch/qwen3_vl_circle_count/vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor-lora-all-linear-r8-lr1e4-b128-mb8-200-v06.v1.yaml`.
@@ -80,6 +80,40 @@ is about 63 MiB on disk (the safetensors payload is 54,296,712 bytes). The run
 consumed 25,600 examples and finished in 2,228 seconds of W&B runtime (about
 37.1 minutes); final training loss was 0.1315.
 
+## Fresh 200-Example Accuracy
+
+The validation-selected step-50 adapter was evaluated once on 200 newly
+generated natural-distribution Circle Count examples. Generation used seeds
+2026090401--2026090600. All 200 images are unique, and none overlap the 256
+training or 256 validation images used for SFT. The test JSONL SHA-256 is
+`cf76cf189bb9e9ce5d1670f38a432680b078bbfe23902e23177d540b869a4b9d`.
+
+Inference used the original image directly, the exact training-time
+answer-first system prompt, one greedy response per image, PEFT 0.20.0, BF16,
+PyTorch SDPA, batch size 4, and a 32-token response limit. There was no image
+preprocessing, detector, component counter, voting, or answer correction.
+
+| Metric | Result |
+| --- | ---: |
+| Exact count (accepting a bare integer response) | **75/200 = 37.5%** |
+| Wilson 95% interval for exact count | 31.1%--44.4% |
+| Strict Gym `\\boxed{N}` accuracy | **0/200 = 0.0%** |
+| Integer-parseable responses | 200/200 = 100% |
+| Mean absolute count error | 1.30 |
+| Mean signed error | +0.52 |
+| Inference time after model load | 36.97 seconds |
+
+Every response was a bare integer even though the prompt requires the answer
+to begin with `\\boxed{N}`. Thus 37.5% measures visual/count correctness, while
+0.0% is the result under the repository's unchanged strict Gym parser. The
+model is highly accurate for counts 1 and 2 (17/17 and 23/24) but degrades
+sharply on denser scenes: it gets 2/19 at count 7 and 1/32 across counts 8--14.
+
+The complete prediction JSONL and summary are stored under
+`/data/ephemeral/nemo-rl/ubuntu/nemo-rl-auto-research/20260904-qwen3-vl-2b-lora-fresh-eval-200/artifacts`.
+Their SHA-256 hashes are `8fdc8560...f00926a` and
+`369c30ea...152b73`, respectively.
+
 ## Microbatch and Backend Findings
 
 | Trial | Outcome |
@@ -107,6 +141,8 @@ NeMo-RL v0.6 otherwise handles the multimodal tensors natively.
 - `run_sft_v05_docker.sh`: common isolated launcher, now supporting an empty
   broad patch path so the v0.6-native VLM implementation is retained.
 - `dtensor_qwen3_vl_v06.patch`: minimal Qwen3-VL factory registration.
+- `evaluate_hf_lora.py`: raw-image PEFT inference and dual exact-count/strict
+  boxed-answer scoring harness.
 - `vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor-lora-all-linear-r8-lr1e4-b128-mb8-200-v06.v1.yaml`:
   selected robust recipe.
 - The mb16 LoRA and mb4 full-SFT configurations are retained as controlled
