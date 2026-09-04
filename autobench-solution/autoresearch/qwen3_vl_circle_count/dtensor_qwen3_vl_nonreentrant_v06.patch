@@ -1,0 +1,31 @@
+diff --git a/nemo_rl/models/policy/utils.py b/nemo_rl/models/policy/utils.py
+--- a/nemo_rl/models/policy/utils.py
++++ b/nemo_rl/models/policy/utils.py
+@@ -62,6 +62,7 @@ AUTOMODEL_FACTORY: Dict[str, Any] = {
+     "qwen2_5_vl": AutoModelForImageTextToText,
+     "qwen2_vl": AutoModelForImageTextToText,
+     "qwen2_5_omni": AutoModelForTextToWaveform,
++    "qwen3_vl": AutoModelForImageTextToText,
+     "qwen3_5": AutoModelForImageTextToText,
+     "llava": AutoModelForImageTextToText,
+     "internvl": AutoModelForImageTextToText,
+@@ -79,6 +80,7 @@ if NEMO_AUTOMODEL_AVAILABLE:
+         "qwen2_5_vl": NeMoAutoModelForImageTextToText,
+         "qwen2_vl": NeMoAutoModelForImageTextToText,
+         "qwen2_5_omni": NeMoAutoModelForTextToWaveform,
++        "qwen3_vl": NeMoAutoModelForImageTextToText,
+         "qwen3_5": NeMoAutoModelForImageTextToText,
+         "llava": NeMoAutoModelForImageTextToText,
+         "internvl": NeMoAutoModelForImageTextToText,
+diff --git a/3rdparty/Automodel-workspace/Automodel/nemo_automodel/components/distributed/parallelizer.py b/3rdparty/Automodel-workspace/Automodel/nemo_automodel/components/distributed/parallelizer.py
+--- a/3rdparty/Automodel-workspace/Automodel/nemo_automodel/components/distributed/parallelizer.py
++++ b/3rdparty/Automodel-workspace/Automodel/nemo_automodel/components/distributed/parallelizer.py
+@@ -211,7 +211,7 @@ class DTensorParallelizer:
+                 pass  # transformers < 5.3.0, fall through to sub-module wrapping
+ 
+             if _use_hf_native_grad_ckpt:
+-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
++                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+             else:
+                 for i, layer in enumerate(layers):
+                     if hasattr(layer, "mlp"):

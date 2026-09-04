@@ -31,6 +31,7 @@ PATCH_PATH="${PATCH_PATH-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_c
 CONTINUATION_PATCH_PATH="${CONTINUATION_PATCH_PATH:-}"
 BACKEND_PATCH_PATH="${BACKEND_PATCH_PATH:-}"
 SYSTEM_PROMPT_FILE="${SYSTEM_PROMPT_FILE:-${REPO_ROOT}/autobench-solution/autoresearch/qwen3_vl_circle_count/prompt_answer_first.txt}"
+SFT_ANSWER_STYLE="${SFT_ANSWER_STYLE:-box_only}"
 PRETRAINED_CHECKPOINT_PATH="${PRETRAINED_CHECKPOINT_PATH:-}"
 EXTRA_OVERRIDES="${EXTRA_OVERRIDES:-}"
 IMAGE="${IMAGE:-nemo-rl:qwen3vl-smoke-cu129}"
@@ -43,6 +44,10 @@ for required_path in "$DATA_ROOT/train.jsonl" "$DATA_ROOT/validation.jsonl" "$CO
         exit 1
     fi
 done
+if [[ "$SFT_ANSWER_STYLE" != "box_only" && "$SFT_ANSWER_STYLE" != "natural_box" ]]; then
+    echo "Error: SFT_ANSWER_STYLE must be box_only or natural_box" >&2
+    exit 1
+fi
 if [[ -n "$PATCH_PATH" && ! -f "$PATCH_PATH" ]]; then
     echo "Error: compatibility patch is missing: $PATCH_PATH" >&2
     exit 1
@@ -78,7 +83,7 @@ mkdir -p \
     "$MEGATRON_ARTIFACT_ROOT"
 
 for split in train validation; do
-    jq --compact-output --rawfile system_prompt "$SYSTEM_PROMPT_FILE" '
+    jq --compact-output --rawfile system_prompt "$SYSTEM_PROMPT_FILE" --arg answer_style "$SFT_ANSWER_STYLE" '
         .target_color as $target
         | {
             messages: [
@@ -97,7 +102,15 @@ for split in train validation; do
                 },
                 {
                     role: "assistant",
-                    content: ("\\boxed{" + (([.circles[] | select(.color == $target)] | length) | tostring) + "}")
+                    content: (
+                        ([.circles[] | select(.color == $target)] | length) as $count
+                        | if $answer_style == "natural_box" then
+                            "There are " + ($count | tostring) + " " + $target
+                            + " circles in the image. \\boxed{" + ($count | tostring) + "}"
+                          else
+                            "\\boxed{" + ($count | tostring) + "}"
+                          end
+                    )
                 }
             ]
         }

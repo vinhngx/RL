@@ -1,0 +1,41 @@
+defaults: vlm_sft-qwen3-vl-2b-instruct-1n1g-dtensor1tp1-b128-200.v1.yaml
+
+# Reproduction-scale Gym distribution: 6,000 unique samples, five epochs,
+# capped at 200 optimizer steps.  Non-reentrant checkpointing is supplied by
+# the paired v0.6 backend patch so the vision-tower LoRA path gets gradients.
+sft:
+  max_num_epochs: 5
+  max_num_steps: 200
+  val_period: 10
+
+checkpointing:
+  save_period: 10
+
+policy:
+  train_micro_batch_size: 8
+  dtensor_cfg:
+    activation_checkpointing: true
+    lora_cfg:
+      enabled: true
+      target_modules: []
+      exclude_modules: []
+      match_all_linear: true
+      dim: 8
+      alpha: 32
+      dropout: 0.0
+      dropout_position: post
+      lora_A_init: xavier
+      use_triton: true
+  optimizer:
+    name: torch.optim.AdamW
+    kwargs:
+      lr: 1.0e-4
+      weight_decay: 0.1
+      betas: [0.9, 0.98]
+      eps: 1.0e-5
+      foreach: false
+      fused: false
+
+logger:
+  wandb:
+    name: sft-2b-gym6k-lora-all-linear-r8-lr1e4-b128-mb8-200-nonreentrant-v06
