@@ -34,10 +34,11 @@ policy:
   max_total_sequence_length: 2048
   precision: bfloat16
   dtensor_cfg:
-    activation_checkpointing: true
+    _v2: true
+    activation_checkpointing: false
     sequence_parallel: false
     lora_cfg:
-      enabled: false
+      enabled: true
       target_modules: []
       exclude_modules: []
       match_all_linear: true
