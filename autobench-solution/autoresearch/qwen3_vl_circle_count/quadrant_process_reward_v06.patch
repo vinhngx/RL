@@ -1,0 +1,80 @@
+diff --git a/nemo_rl/data/datasets/response_datasets/circle_count.py b/nemo_rl/data/datasets/response_datasets/circle_count.py
+--- a/nemo_rl/data/datasets/response_datasets/circle_count.py
++++ b/nemo_rl/data/datasets/response_datasets/circle_count.py
+@@ -27,6 +27,7 @@ def format_circle_count_dataset(datum_dict: dict[str, Any]) -> dict[str, Any]:
+     expected_count = sum(
+         circle["color"] == row["target_color"] for circle in row["circles"]
+     )
++    ground_truth = row.get("process_ground_truth", str(expected_count))
+     return {
+         "messages": [
+             {
+@@ -38,7 +39,7 @@ def format_circle_count_dataset(datum_dict: dict[str, Any]) -> dict[str, Any]:
+                     {"type": "text", "text": question_text},
+                 ],
+             },
+-            {"role": "assistant", "content": str(expected_count)},
++            {"role": "assistant", "content": ground_truth},
+         ],
+         "task_name": datum_dict["task_name"],
+     }
+diff --git a/nemo_rl/environments/rewards.py b/nemo_rl/environments/rewards.py
+--- a/nemo_rl/environments/rewards.py
++++ b/nemo_rl/environments/rewards.py
+@@ -12,4 +12,5 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
++import json
+ import re
+ from typing import Callable, Optional
+@@ -43,6 +44,33 @@ def boxed_numeric_reward(
+     return 0.0, False
+ 
+ 
++def quadrant_process_reward(
++    ground_truth: str, response: str
++) -> tuple[float, Optional[bool]]:
++    """Reward four correct quadrant subtotals and the strict boxed total."""
++    try:
++        expected = json.loads(ground_truth)
++    except (json.JSONDecodeError, TypeError):
++        return boxed_numeric_reward(ground_truth, response)
++    if not isinstance(expected, dict):
++        return boxed_numeric_reward(ground_truth, response)
++
++    fields = {}
++    for name in ("tl", "tr", "bl", "br"):
++        match = re.search(rf"\b{name}\s*=\s*(\d+)", response, re.IGNORECASE)
++        if match:
++            fields[name] = int(match.group(1))
++    box_match = re.search(r"\\boxed\{(\d+)\}", response)
++    predicted_total = int(box_match.group(1)) if box_match else None
++
++    correct_subtotals = sum(
++        fields.get(name) == int(expected[name]) for name in ("tl", "tr", "bl", "br")
++    )
++    total_is_correct = predicted_total == int(expected["total"])
++    score = 0.125 * correct_subtotals + 0.5 * total_is_correct
++    return score, total_is_correct and correct_subtotals == 4
++
++
+ def boxed_numeric_asymmetric_reward(
+     ground_truth: str, response: str
+ ) -> tuple[float, Optional[bool]]:
+diff --git a/nemo_rl/environments/vlm_environment.py b/nemo_rl/environments/vlm_environment.py
+--- a/nemo_rl/environments/vlm_environment.py
++++ b/nemo_rl/environments/vlm_environment.py
+@@ -34,5 +34,6 @@ from nemo_rl.environments.rewards import (
+     combine_reward_functions,
+     exact_answer_alphanumeric_reward,
+     format_reward,
++    quadrant_process_reward,
+     math_expression_reward,
+ )
+@@ -85,4 +86,6 @@ class VLMVerifyWorker:
+             elif reward_func_name == "boxed_numeric_proximity":
+                 reward_func = boxed_numeric_proximity_reward
++            elif reward_func_name == "quadrant_process":
++                reward_func = quadrant_process_reward
+             else:
+                 raise ValueError(f"Invalid reward function: {reward_func_name}")

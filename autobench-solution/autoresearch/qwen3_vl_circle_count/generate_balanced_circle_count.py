@@ -43,11 +43,13 @@ def make_balanced_example(
     seed: int,
     target_count: int,
     target_color: str,
+    min_total_circles: int = 5,
+    max_total_circles: int = 20,
 ) -> dict:
     rng = random.Random(seed)
     example = generator.make_example(
         seed,
-        num_circles_range=(max(5, target_count), 20),
+        num_circles_range=(max(min_total_circles, target_count), max_total_circles),
         num_colors_range=(2, 4),
     )
 
@@ -90,7 +92,14 @@ def main() -> None:
         help="Optional comma-separated color cycle; repeated names provide weighting",
     )
     parser.add_argument("--seed-offset", type=int, default=100_000)
+    parser.add_argument("--min-total-circles", type=int, default=5)
+    parser.add_argument("--max-total-circles", type=int, default=20)
     args = parser.parse_args()
+
+    if args.min_total_circles < 1:
+        raise ValueError("--min-total-circles must be positive")
+    if args.max_total_circles < args.min_total_circles:
+        raise ValueError("--max-total-circles must be >= --min-total-circles")
 
     generator = load_generator(args.generator)
     colors = (
@@ -125,6 +134,8 @@ def main() -> None:
                     seed=seed,
                     target_count=target_count,
                     target_color=colors[repetition % len(colors)],
+                    min_total_circles=args.min_total_circles,
+                    max_total_circles=args.max_total_circles,
                 )
                 output.write(json.dumps(example, separators=(",", ":")) + "\n")
                 example_index += 1
