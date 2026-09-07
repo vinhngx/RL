@@ -7,20 +7,24 @@ VLM RL, and document the whole path.
 
 ## Headline result
 
-**0.900 accuracy** on the held-out 200-task circle_count gym profile set
-(out-of-box: 0.365; +53.5pp / ~2.5x). Recipe: SFT from the original checkpoint,
-40k synthetic rows (12 answer templates), bs=128, LoRA dim 8 (all-linear),
-lr 1e-4, ~0.64 epochs (200 steps); peak found by checkpoint sampling.
+**0.945 accuracy** on the held-out 200-task circle_count gym profile set
+(out-of-box: 0.365; +58pp / ~2.6x). Pipeline: SFT from the original checkpoint
+(40k synthetic rows, 12 answer templates, bs=128, LoRA, 0.64 epochs → 0.900),
+then stacked GRPO windows with fresh LoRA on the merged SFT model (lr 5e-5,
+16 gens/prompt, peak pooled by val accuracy): dipped and rebounded to val
+0.9453 on the in-training set; gym-verified at **0.945**.
 
 | Candidate | Gym accuracy (200 tasks, temp 1.0) |
 |---|---|
 | Out-of-box baseline | 0.365 |
 | GRPO best (native env shim, step_120) | 0.615 |
 | SFT 6k rows / 200 steps | 0.865–0.885 |
-| **SFT 40k rows / step_200 (of 400)** | **0.900** |
+| SFT 40k rows / step_200 (of 400) | 0.900 |
 | SFT 40k rows / step_400 (overfit) | 0.805 |
+| **SFT → GRPO cascade (final)** | **0.945** |
 
-Error signature of the best model: counts ≤7 → 97% correct; counts >7 → ~48%.
+Error signature of the final model: counts ≤7 → 95% correct; counts >7 → 90%
+(GRPO-on-SFT is what lifted the hard band from 48% to 90%).
 
 ## What had to be solved first (infrastructure)
 
