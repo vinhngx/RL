@@ -13,12 +13,13 @@ grpo:
   max_val_samples: 128
   val_batch_size: 32
   val_at_end: true
+  val_at_start: true
 
 checkpointing:
-  checkpoint_dir: /brev/circle-count-gym/ckpts/circlecount_${policy.model_name}
+  checkpoint_dir: /brev/circle-count-gym/ckpts-rl-on-sft/qwen3vl2b_sft200
 
 policy:
-  model_name: Qwen/Qwen3-VL-2B-Instruct
+  model_name: /brev/circle-count-gym/merged-sft2-200
   train_global_batch_size: 128
   train_micro_batch_size: 1
   logprob_batch_size: 2
@@ -32,7 +33,7 @@ policy:
       enabled: true
   optimizer:
     kwargs:
-      lr: 1.0e-04
+      lr: 5.0e-05
   generation:
     max_new_tokens: 640
     vllm_cfg:
