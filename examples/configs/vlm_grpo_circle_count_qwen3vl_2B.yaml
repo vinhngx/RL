@@ -16,7 +16,7 @@ grpo:
   val_at_start: true
 
 checkpointing:
-  checkpoint_dir: /brev/circle-count-gym/ckpts-rl-on-sft5/qwen3vl2b_rlsft3s15
+  checkpoint_dir: /brev/circle-count-gym/ckpts-rl-on-sft6/qwen3vl2b_rlsft3s15
 
 policy:
   model_name: /brev/circle-count-gym/merged-rlsft3s15
@@ -31,6 +31,7 @@ policy:
   dtensor_cfg:
     lora_cfg:
       enabled: true
+      exclude_modules: ["*visual*"]
   optimizer:
     kwargs:
       lr: 5.0e-05
