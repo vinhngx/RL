@@ -1,0 +1,100 @@
+diff --git a/nemo_rl/data/collate_fn.py b/nemo_rl/data/collate_fn.py
+index 5fc9f3e..39fc8f5 100644
+--- a/nemo_rl/data/collate_fn.py
++++ b/nemo_rl/data/collate_fn.py
+@@ -186,6 +186,7 @@ def preference_collate_fn(
+             "sample_mask": batch["loss_multiplier"],
+         }
+     )
++    data.update(cat_and_padded.get_multimodal_dict(as_tensors=False))
+     if add_loss_mask:
+         data["token_mask"] = cat_and_padded["token_loss_mask"]
+ 
+diff --git a/nemo_rl/data/processors.py b/nemo_rl/data/processors.py
+index 3f8ef1a..8033c8f 100644
+--- a/nemo_rl/data/processors.py
++++ b/nemo_rl/data/processors.py
+@@ -13,6 +13,7 @@
+ 
+ """Contains data processors for evaluation."""
+ 
++import copy
+ import json
+ import logging
+ from typing import Any, Dict, cast
+@@ -264,8 +265,15 @@ def preference_preprocessor(
+             "Ties are not supported yet. You can use the following command to filter out ties: `cat <PathToPreferenceDataset> | jq 'select(.completions[0].rank != .completions[1].rank)'`."
+         )
+ 
+-    messages_chosen = datum_dict["context"] + chosen_completion["completion"]
+-    messages_rejected = datum_dict["context"] + rejected_completion["completion"]
++    # Formatting multimodal content mutates nested message parts. Isolate the
++    # two branches so the rejected path does not see an already-rendered image
++    # placeholder from the chosen path.
++    messages_chosen = copy.deepcopy(
++        datum_dict["context"] + chosen_completion["completion"]
++    )
++    messages_rejected = copy.deepcopy(
++        datum_dict["context"] + rejected_completion["completion"]
++    )
+ 
+     message_log_chosen = get_formatted_message_log(
+         messages_chosen, tokenizer, task_data_spec
+diff --git a/nemo_rl/data/datasets/preference_datasets/__init__.py b/nemo_rl/data/datasets/preference_datasets/__init__.py
+index b1b8cf5..98cd232 100644
+--- a/nemo_rl/data/datasets/preference_datasets/__init__.py
++++ b/nemo_rl/data/datasets/preference_datasets/__init__.py
+@@ -15,6 +15,9 @@ from nemo_rl.data import PreferenceDatasetConfig
+ from nemo_rl.data.datasets.preference_datasets.binary_preference_dataset import (
+     BinaryPreferenceDataset,
+ )
++from nemo_rl.data.datasets.preference_datasets.circle_count import (
++    CircleCountPreferenceDataset,
++)
+ from nemo_rl.data.datasets.preference_datasets.helpsteer3 import HelpSteer3Dataset
+ from nemo_rl.data.datasets.preference_datasets.preference_dataset import (
+     PreferenceDataset,
+@@ -28,6 +31,7 @@ DATASET_REGISTRY = {
+     # load from local JSONL file or HuggingFace
+     "BinaryPreferenceDataset": BinaryPreferenceDataset,
+     "PreferenceDataset": PreferenceDataset,
++    "CircleCountPreferenceDataset": CircleCountPreferenceDataset,
+ }
+ 
+ 
+diff --git a/nemo_rl/data/datasets/preference_datasets/circle_count.py b/nemo_rl/data/datasets/preference_datasets/circle_count.py
+new file mode 100644
+index 0000000..9b6196f
+--- /dev/null
++++ b/nemo_rl/data/datasets/preference_datasets/circle_count.py
+@@ -0,0 +1,30 @@
++import json
++from typing import Any
++
++from datasets import Dataset
++
++from nemo_rl.data.datasets.raw_dataset import RawDataset
++
++
++def parse_circle_count_preference(datum_dict: dict[str, Any]) -> dict[str, Any]:
++    """Decode one raw preference row without Arrow normalizing media parts."""
++    row = json.loads(datum_dict["raw"])
++    row["task_name"] = datum_dict["task_name"]
++    return row
++
++
++class CircleCountPreferenceDataset(RawDataset):
++    """Preference JSONL that preserves heterogeneous image/text content."""
++
++    preprocessor = staticmethod(parse_circle_count_preference)
++
++    def __init__(self, data_path: str, **kwargs: Any):
++        self.task_name = "circle-count-preference"
++        with open(data_path) as source:
++            raw_lines = list(source)
++        self.dataset = Dataset.from_dict(
++            {
++                "raw": raw_lines,
++                "task_name": [self.task_name] * len(raw_lines),
++            }
++        )

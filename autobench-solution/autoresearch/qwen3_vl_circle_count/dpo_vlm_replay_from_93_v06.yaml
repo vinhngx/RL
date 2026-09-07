@@ -1,0 +1,87 @@
+# Image-conditioned DPO on exact count preferences mined from the 93% leader.
+defaults: /opt/nemo-rl/examples/configs/dpo.yaml
+
+dpo:
+  max_num_epochs: 1
+  max_num_steps: 8
+  val_period: 2
+  val_batches: 8
+  val_global_batch_size: 32
+  val_micro_batch_size: 1
+  val_at_start: true
+  val_at_end: true
+  reference_policy_kl_penalty: 0.1
+  preference_loss_weight: 1.0
+  sft_loss_weight: 0.05
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/vlm-dpo-replay-from-93/checkpoints
+  metric_name: val:validation-default_loss
+  higher_is_better: false
+  keep_top_k: 4
+  save_period: 2
+  save_optimizer: true
+
+policy:
+  model_name: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/dynamic-sampling-exact-from-grpo8/merged-step2
+  tokenizer:
+    name: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/dynamic-sampling-exact-from-grpo8/merged-step2
+    chat_template: default
+    chat_template_kwargs:
+      enable_thinking: false
+  train_global_batch_size: 32
+  train_micro_batch_size: 1
+  max_total_sequence_length: 2048
+  precision: bfloat16
+  dtensor_cfg:
+    activation_checkpointing: false
+    sequence_parallel: false
+    lora_cfg:
+      enabled: true
+      target_modules: []
+      exclude_modules: []
+      match_all_linear: true
+      dim: 8
+      alpha: 16
+      dropout: 0.0
+      use_triton: true
+  optimizer:
+    kwargs:
+      lr: 2.0e-6
+      weight_decay: 0.0
+      betas: [0.9, 0.95]
+      eps: 1.0e-8
+      foreach: false
+      fused: false
+  scheduler:
+    - name: torch.optim.lr_scheduler.ConstantLR
+      kwargs:
+        factor: 1.0
+        total_iters: 10000000000
+
+data:
+  max_input_seq_length: 2048
+  shuffle: true
+  num_workers: 1
+  train:
+    dataset_name: CircleCountPreferenceDataset
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/vlm-dpo-replay-from-93/data/train.jsonl
+  validation:
+    dataset_name: CircleCountPreferenceDataset
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/vlm-dpo-replay-from-93/data/validation.jsonl
+  default:
+    dataset_name: CircleCountPreferenceDataset
+    prompt_file: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/prompt_grpo_circle_count_boxed.txt
+    system_prompt_file: null
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/vlm-dpo-replay-from-93/logs
+  wandb_enabled: true
+  monitor_gpus: true
+  wandb:
+    project: qwen3-vl-circle-count-autoresearch
+    name: vlm-dpo-replay-from-93
+
+cluster:
+  gpus_per_node: 1
+  num_nodes: 1
