@@ -56,7 +56,7 @@ if [[ ! -f \$PREDICTIONS ]]; then
   \$PY \$SCRIPT/evaluate_hf_lora.py \\
     --data \$POOL --model \$BASE \\
     --prompt-file \$SCRIPT/prompt_gym_boxed.txt \\
-    --output \$PREDICTIONS --batch-size 16 --max-new-tokens 128 \\
+    --output \$PREDICTIONS --batch-size 32 --max-new-tokens 128 \\
     --temperature 0 --seed 42
 fi
 \$PY \$SCRIPT/generate_vlm_dpo_pairs.py \\
