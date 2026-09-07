@@ -1,0 +1,14 @@
+# Exact GRPO on the complete mined candidate pool: failures plus replay anchors.
+defaults: grpo_model_mined_hard_negatives_from_93_v06.yaml
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/full-pool-replay-from-93/checkpoints
+
+data:
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/model-mined-hard-negatives-from-93/data/candidate-pool.jsonl
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/full-pool-replay-from-93/logs
+  wandb:
+    name: grpo-full-pool-replay-from-93
