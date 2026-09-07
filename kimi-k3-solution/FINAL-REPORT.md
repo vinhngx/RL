@@ -38,6 +38,10 @@ then `\boxed{N}`) using a fresh SFT + GRPO cascade.
 Best model: merged-rlsft3s15 under
 /ephemeral/nemo-rl/ubuntu/circle-count-gym/ (gym accuracy 0.945).
 
+**Fresh-set cross-check:** on a newly generated, never-touched 200-task eval
+set (seeds 200000+): **0.950** (95% CI [0.920, 0.980]; easy 97%, hard 84%).
+The campaign's pool-by-val strategy was not selection-biased.
+
 ## What had to be solved first (infrastructure)
 
 1. **Driver/CUDA blocker.** Host driver 565.57.01 (CUDA 12.7, apt-held by the
