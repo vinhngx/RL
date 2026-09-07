@@ -33,9 +33,20 @@ docker buildx build --build-context nemo-rl=. --build-arg SKIP_SGLANG_BUILD=1 \
 
 ## 1. Generate the synthetic SFT data
 
-Data generator: `/ephemeral/nemo-rl/ubuntu/circle-count-gym/gen_sft.py`
-(copies of `generate_data.make_example` from the gym server; templated
-answers ending in `\boxed{N}`).
+Data generator: `gen_sft.py`, committed at
+[`scripts/gen_sft.py`](scripts/gen_sft.py) in this folder (it wraps
+`generate_data.make_example` from the gym server with templated answers
+ending in `\boxed{N}`). Copy the `scripts/` dir onto the `/brev` mount before
+launching containers, e.g.:
+
+```bash
+mkdir -p /ephemeral/nemo-rl/ubuntu/circle-count-gym
+cp -r /home/ubuntu/RL/kimi-k3-solution/scripts/* /ephemeral/nemo-rl/ubuntu/circle-count-gym/
+```
+
+(All runner scripts here — `sft_run.sh`, `train_run.sh`, `profile_run.sh`,
+`merge_lora.py`, `merge_and_eval.sh`, `reward_test.py` — are committed in
+`kimi-k3-solution/scripts/` and expect that layout.)
 
 ```bash
 docker run --rm -v /ephemeral/nemo-rl/ubuntu:/brev -v ~/RL-ref-v0.6.0:/opt/nemo-rl \
