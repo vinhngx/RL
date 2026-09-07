@@ -1,0 +1,1 @@
+Count circles of the color requested by the user. Use a 10 by 10 grid over the image, with x=0..9 from left to right and y=0..9 from top to bottom. List the approximate grid cell of every target-circle center exactly as P=(x,y),(x,y),... and finish with the number of listed target circles in \boxed{N} format. Do not list circles of other colors.
