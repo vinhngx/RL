@@ -23,20 +23,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--mode", choices=("sft", "grpo"), required=True)
+    parser.add_argument(
+        "--coordinate-space",
+        choices=("grid", "pixel"),
+        default="grid",
+        help="Coordinate representation stored in GRPO process ground truth.",
+    )
     parser.add_argument("--grid-size", type=int, default=10)
     parser.add_argument("--image-size", type=int, default=1000)
     return parser.parse_args()
 
 
 def target_points(
-    row: dict[str, Any], *, grid_size: int, image_size: int
+    row: dict[str, Any], *, grid_size: int, image_size: int, coordinate_space: str
 ) -> list[tuple[int, int]]:
     points = []
     for circle in row["circles"]:
         if circle["color"] != row["target_color"]:
             continue
-        x = min(grid_size - 1, circle["x"] * grid_size // image_size)
-        y = min(grid_size - 1, circle["y"] * grid_size // image_size)
+        if coordinate_space == "pixel":
+            x, y = int(circle["x"]), int(circle["y"])
+        else:
+            x = min(grid_size - 1, circle["x"] * grid_size // image_size)
+            y = min(grid_size - 1, circle["y"] * grid_size // image_size)
         points.append((x, y))
     return sorted(points, key=lambda point: (point[1], point[0]))
 
@@ -69,14 +78,22 @@ def main() -> None:
     with args.output.open("w") as destination:
         for row in rows:
             points = target_points(
-                row, grid_size=args.grid_size, image_size=args.image_size
+                row,
+                grid_size=args.grid_size,
+                image_size=args.image_size,
+                coordinate_space=args.coordinate_space,
             )
             if args.mode == "sft":
                 output = sft_row(row, points)
             else:
                 output = copy.deepcopy(row)
                 output["process_ground_truth"] = json.dumps(
-                    {"points": points, "total": len(points)}, separators=(",", ":")
+                    {
+                        "coordinate_space": args.coordinate_space,
+                        "points": points,
+                        "total": len(points),
+                    },
+                    separators=(",", ":"),
                 )
             destination.write(json.dumps(output, separators=(",", ":")) + "\n")
     print(json.dumps({"input": len(rows), "output": len(rows)}, sort_keys=True))
