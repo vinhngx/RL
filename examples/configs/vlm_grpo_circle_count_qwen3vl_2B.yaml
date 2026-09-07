@@ -16,7 +16,7 @@ grpo:
   val_at_start: true
 
 checkpointing:
-  checkpoint_dir: /brev/circle-count-gym/ckpts-rl-on-sft4/qwen3vl2b_rlsft3s15
+  checkpoint_dir: /brev/circle-count-gym/ckpts-rl-on-sft5/qwen3vl2b_rlsft3s15
 
 policy:
   model_name: /brev/circle-count-gym/merged-rlsft3s15
