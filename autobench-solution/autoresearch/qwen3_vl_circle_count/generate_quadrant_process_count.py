@@ -37,8 +37,10 @@ def add_process_supervision(example: dict, *, image_size: int = 1000) -> dict:
     user_content = example["responses_create_params"]["input"][1]["content"]
     user_content[1]["text"] = (
         f"How many {target_color} circles are in the image? First count the "
-        "circles whose centers lie in each image quadrant. Reply exactly as "
-        r"TL=<n> TR=<n> BL=<n> BR=<n> \boxed{<total>}."
+        "circles whose centers lie in each image quadrant. Reply with five "
+        "plain integers and no angle brackets, using this schema: "
+        r"TL=2 TR=1 BL=0 BR=3 \boxed{6}. Replace every example number with "
+        "your counts."
     )
     example["process_ground_truth"] = json.dumps(counts, separators=(",", ":"))
     return example
