@@ -9,6 +9,7 @@
 """Scale the effective delta of a PEFT LoRA adapter."""
 
 import argparse
+import math
 import shutil
 from pathlib import Path
 
@@ -32,8 +33,8 @@ def main() -> None:
     input_weights = args.input / WEIGHTS_NAME
     if not input_weights.is_file():
         raise FileNotFoundError(f"missing PEFT weights: {input_weights}")
-    if args.scale <= 0:
-        raise ValueError("--scale must be positive")
+    if not math.isfinite(args.scale) or args.scale == 0:
+        raise ValueError("--scale must be finite and nonzero")
     if args.output.exists() and any(args.output.iterdir()):
         raise FileExistsError(f"refusing to overwrite non-empty {args.output}")
 
