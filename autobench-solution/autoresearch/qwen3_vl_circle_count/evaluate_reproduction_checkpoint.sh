@@ -37,8 +37,8 @@ docker run --rm --gpus all --ipc=host \
   -e UV_CACHE_DIR=/brev/cache/uv \
   -e TMPDIR=/brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-match-external/github-dataset-verbatim/eval-tmp \
   "$IMAGE" bash -lc "
-    cd /opt/nemo-rl
-    uv run --no-sync python /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/evaluate_hf_lora.py \\
+    /opt/ray_venvs/nemo_rl.models.policy.workers.megatron_policy_worker.MegatronPolicyWorker/bin/python \\
+      /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/evaluate_hf_lora.py \\
       --data /brev/nemo-rl-auto-research/20260904-qwen3-vl-2b-gym6k-reference/eval-gym-profile-200/profile-seed10000.jsonl \\
       --adapter /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-match-external/github-dataset-verbatim/checkpoints/step_${STEP}/policy/weights/model \\
       --prompt-file /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/prompt_gym_boxed.txt \\
