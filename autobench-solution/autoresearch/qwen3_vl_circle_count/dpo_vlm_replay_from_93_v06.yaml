@@ -5,10 +5,12 @@ dpo:
   max_num_epochs: 1
   max_num_steps: 8
   val_period: 2
-  val_batches: 8
+  # One preference batch is enough for a training-health signal; checkpoint
+  # selection uses the frozen 200-example greedy verifier instead.
+  val_batches: 1
   val_global_batch_size: 32
   val_micro_batch_size: 1
-  val_at_start: true
+  val_at_start: false
   val_at_end: true
   reference_policy_kl_penalty: 0.1
   preference_loss_weight: 1.0
