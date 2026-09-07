@@ -17,7 +17,7 @@ if [[ -f "$HOST_REPO/.env" ]]; then
   set +a
 fi
 
-mkdir -p "$EXP_ROOT"/{raw-data,sft-data,logs,checkpoints,ray,tmp,wandb}
+mkdir -p "$EXP_ROOT"/{raw-data,sft-data,hf-datasets-cache,logs,checkpoints,ray,tmp,wandb}
 if [[ ! -f "$EXP_ROOT/raw-data/train.jsonl" ]]; then
   docker run --rm -v "$BREV_ROOT:/brev" \
     "$IMAGE" bash -lc '
@@ -52,7 +52,7 @@ docker run --rm --name qwen3-vl-2b-process-warmstart --gpus all --ipc=host \
   -e WANDB_API_KEY -e HF_TOKEN \
   -e HF_HOME=/brev/cache/huggingface \
   -e HF_HUB_CACHE=/brev/cache/huggingface/hub \
-  -e HF_DATASETS_CACHE=/brev/cache/huggingface/datasets \
+  -e HF_DATASETS_CACHE=/runstate/hf-datasets-cache \
   -e TRANSFORMERS_CACHE=/brev/cache/huggingface/transformers \
   -e UV_CACHE_DIR=/brev/cache/uv \
   -e TRITON_CACHE_DIR=/brev/cache/triton \
