@@ -1,0 +1,121 @@
+# Conservative GRPO continuation from the selected merged SFT step-150 model.
+defaults: /opt/nemo-rl/examples/configs/vlm_grpo_3B.yaml
+
+grpo:
+  num_prompts_per_step: 16
+  num_generations_per_prompt: 8
+  max_num_epochs: 1
+  max_num_steps: 12
+  val_period: 4
+  val_at_start: true
+  val_at_end: true
+  max_val_samples: 200
+  val_batch_size: 50
+  seed: 42
+  use_dynamic_sampling: false
+
+loss_fn:
+  reference_policy_kl_penalty: 0.02
+  reference_policy_kl_type: k3
+  ratio_clip_min: 0.2
+  ratio_clip_max: 0.2
+
+checkpointing:
+  enabled: true
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/hard-balanced-grpo/checkpoints
+  metric_name: val:accuracy
+  higher_is_better: true
+  keep_top_k: 4
+  save_period: 4
+  save_optimizer: false
+
+policy:
+  model_name: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-match-external/github-dataset-verbatim/merged-step150
+  tokenizer:
+    name: ${policy.model_name}
+    chat_template: default
+    chat_template_kwargs:
+      enable_thinking: false
+  train_global_batch_size: 128
+  train_micro_batch_size: 1
+  logprob_batch_size: 2
+  max_total_sequence_length: 2048
+  precision: bfloat16
+  dynamic_batching:
+    enabled: true
+  sequence_packing:
+    enabled: false
+  dtensor_cfg:
+    activation_checkpointing: false
+    lora_cfg:
+      enabled: true
+      target_modules: []
+      exclude_modules: []
+      match_all_linear: true
+      dim: 8
+      alpha: 16
+      dropout: 0.0
+      dropout_position: post
+      lora_A_init: xavier
+      use_triton: true
+  optimizer:
+    kwargs:
+      lr: 1.0e-6
+      weight_decay: 0.01
+      betas: [0.9, 0.999]
+      eps: 1.0e-8
+      foreach: false
+      fused: false
+  scheduler:
+    - name: torch.optim.lr_scheduler.ConstantLR
+      kwargs:
+        factor: 1.0
+        total_iters: 10000000000
+    - milestones: []
+  generation:
+    max_new_tokens: 128
+    temperature: 1.0
+    top_p: 1.0
+    top_k: null
+    vllm_cfg:
+      skip_tokenizer_init: false
+      gpu_memory_utilization: 0.45
+      enable_vllm_metrics_logger: false
+    vllm_kwargs:
+      mm_processor_cache_gb: 0
+
+data:
+  max_input_seq_length: 2048
+  shuffle: true
+  train:
+    dataset_name: circle-count
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/hard-balanced-grpo/data/train-counts-7-14.jsonl
+    split_validation_size: 0
+  validation:
+    dataset_name: circle-count
+    data_path: /brev/nemo-rl-auto-research/20260904-qwen3-vl-2b-gym6k-reference/eval-gym-profile-200/profile-seed10000.jsonl
+  default:
+    prompt_file: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/prompt_grpo_circle_count_boxed.txt
+    processor: vlm_hf_data_processor
+    env_name: circle-count
+
+env:
+  circle-count:
+    num_workers: 4
+    reward_functions:
+      - name: boxed_numeric
+        weight: 1.0
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/hard-balanced-grpo/logs
+  num_val_samples_to_print: 4
+  wandb_enabled: true
+  tensorboard_enabled: false
+  monitor_gpus: true
+  wandb:
+    project: qwen3-vl-circle-count-autoresearch
+    name: grpo-from-sft-hard-balanced
+
+cluster:
+  gpus_per_node: 1
+  num_nodes: 1
