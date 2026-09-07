@@ -1,0 +1,72 @@
+diff --git a/nemo_rl/models/policy/utils.py b/nemo_rl/models/policy/utils.py
+--- a/nemo_rl/models/policy/utils.py
++++ b/nemo_rl/models/policy/utils.py
+@@ -62,4 +62,5 @@ AUTOMODEL_FACTORY: Dict[str, Any] = {
+     "qwen2_5_vl": AutoModelForImageTextToText,
+     "qwen2_vl": AutoModelForImageTextToText,
+     "qwen2_5_omni": AutoModelForTextToWaveform,
++    "qwen3_vl": AutoModelForImageTextToText,
+     "qwen3_5": AutoModelForImageTextToText,
+@@ -79,4 +80,5 @@ if NEMO_AUTOMODEL_AVAILABLE:
+         "qwen2_5_vl": NeMoAutoModelForImageTextToText,
+         "qwen2_vl": NeMoAutoModelForImageTextToText,
+         "qwen2_5_omni": NeMoAutoModelForTextToWaveform,
++        "qwen3_vl": NeMoAutoModelForImageTextToText,
+         "qwen3_5": NeMoAutoModelForImageTextToText,
+diff --git a/nemo_rl/data/datasets/response_datasets/__init__.py b/nemo_rl/data/datasets/response_datasets/__init__.py
+--- a/nemo_rl/data/datasets/response_datasets/__init__.py
++++ b/nemo_rl/data/datasets/response_datasets/__init__.py
+@@ -15,2 +15,3 @@ from nemo_rl.data import ResponseDatasetConfig
+ from nemo_rl.data.datasets.response_datasets.aime24 import AIME2024Dataset
++from nemo_rl.data.datasets.response_datasets.circle_count import CircleCountSFTDataset
+ from nemo_rl.data.datasets.response_datasets.clevr import CLEVRCoGenTDataset
+@@ -43,3 +44,4 @@ DATASET_REGISTRY = {
+     # built-in datasets
+     "AIME2024": AIME2024Dataset,
++    "circle-count-sft": CircleCountSFTDataset,
+     "clevr-cogent": CLEVRCoGenTDataset,
+diff --git a/nemo_rl/data/datasets/response_datasets/circle_count.py b/nemo_rl/data/datasets/response_datasets/circle_count.py
+new file mode 100644
+--- /dev/null
++++ b/nemo_rl/data/datasets/response_datasets/circle_count.py
+@@ -0,0 +1,26 @@
++import json
++from typing import Any
++
++from datasets import Dataset
++
++from nemo_rl.data.datasets.raw_dataset import RawDataset
++
++
++class CircleCountSFTDataset(RawDataset):
++    """Keep mixed string/list message content as raw JSON until processing."""
++
++    def __init__(self, data_path: str, **kwargs: Any):
++        self.task_name = "circle-count-sft"
++        with open(data_path) as source:
++            raw_lines = list(source)
++        self.dataset = Dataset.from_dict(
++            {
++                "raw": raw_lines,
++                "task_name": [self.task_name] * len(raw_lines),
++            }
++        )
++
++
++def format_circle_count_sft_dataset(datum_dict: dict[str, Any]) -> dict[str, Any]:
++    row = json.loads(datum_dict["raw"])
++    return {"messages": row["messages"], "task_name": datum_dict["task_name"]}
+diff --git a/nemo_rl/data/processors.py b/nemo_rl/data/processors.py
+--- a/nemo_rl/data/processors.py
++++ b/nemo_rl/data/processors.py
+@@ -149,4 +149,10 @@ def sft_processor(
+ ) -> DatumSpec:
+     """Process a datum dictionary for SFT training."""
+     # optional preprocessor
++    if datum_dict["task_name"] == "circle-count-sft":
++        from nemo_rl.data.datasets.response_datasets.circle_count import (
++            format_circle_count_sft_dataset,
++        )
++
++        datum_dict = format_circle_count_sft_dataset(datum_dict)
+     if datum_dict["task_name"] == "clevr-cogent":

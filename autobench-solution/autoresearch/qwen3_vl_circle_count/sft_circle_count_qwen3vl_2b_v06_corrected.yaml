@@ -1,0 +1,83 @@
+# Corrected reproduction of the GitHub Circle Count recipe on NeMo-RL v0.6.
+# The branch's old-schema dataset registration is retained, while `default`
+# selects Qwen's native multimodal template instead of the broken null/passthrough
+# template documented in the pushed recipe.
+defaults:
+  - sft.yaml
+
+sft:
+  max_num_epochs: 5
+  max_num_steps: 200
+  val_period: 20
+  val_batches: 2
+  val_global_batch_size: 64
+  val_micro_batch_size: 1
+  val_at_start: false
+  val_at_end: true
+
+policy:
+  model_name: Qwen/Qwen3-VL-2B-Instruct
+  tokenizer:
+    name: ${policy.model_name}
+    chat_template: default
+    chat_template_kwargs:
+      enable_thinking: false
+  train_global_batch_size: 128
+  train_micro_batch_size: 2
+  max_total_sequence_length: 2048
+  precision: bfloat16
+  sequence_packing:
+    enabled: false
+  dtensor_cfg:
+    activation_checkpointing: true
+    lora_cfg:
+      enabled: true
+      target_modules: []
+      exclude_modules: []
+      match_all_linear: true
+      dim: 8
+      alpha: 32
+      dropout: 0.0
+      dropout_position: post
+      lora_A_init: xavier
+      use_triton: true
+  optimizer:
+    kwargs:
+      lr: 1.0e-4
+
+checkpointing:
+  enabled: true
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-match-external/github-dataset-verbatim/checkpoints
+  metric_name: val:val_loss
+  higher_is_better: false
+  keep_top_k: 3
+  save_period: 50
+  save_optimizer: false
+
+data:
+  max_input_seq_length: 2048
+  add_bos: true
+  add_eos: true
+  add_generation_prompt: false
+  train:
+    dataset_name: circle-count-sft
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-match-external/github-dataset-verbatim/data/sft-train.jsonl
+  validation:
+    dataset_name: circle-count-sft
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-match-external/github-dataset-verbatim/data/sft-val.jsonl
+  default:
+    processor: sft_processor
+    prompt_file: null
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-match-external/github-dataset-verbatim/logs
+  wandb_enabled: true
+  tensorboard_enabled: false
+  monitor_gpus: true
+  wandb:
+    project: qwen3-vl-circle-count-autoresearch
+    name: github-dataset-verbatim
+
+cluster:
+  gpus_per_node: 1
+  num_nodes: 1
