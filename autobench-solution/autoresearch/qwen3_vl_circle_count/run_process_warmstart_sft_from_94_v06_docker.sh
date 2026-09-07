@@ -9,7 +9,6 @@ CAMPAIGN=$BREV_ROOT/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98
 EXP_ROOT=$CAMPAIGN/process-warmstart-grpo-from-94
 SCRIPT=$HOST_REPO/autobench-solution/autoresearch/qwen3_vl_circle_count
 CONFIG=$SCRIPT/sft_quadrant_process_warmstart_v06.yaml
-GYM=$BREV_ROOT/reference-rl-circle-count/3rdparty/Gym-workspace/Gym/resources_servers/circle_count/generate_data.py
 
 if [[ -f "$HOST_REPO/.env" ]]; then
   set -a
@@ -20,10 +19,22 @@ fi
 
 mkdir -p "$EXP_ROOT"/{raw-data,sft-data,logs,checkpoints,ray,tmp,wandb}
 if [[ ! -f "$EXP_ROOT/raw-data/train.jsonl" ]]; then
-  python3 "$GYM" --n 4096 --seed-offset 3000000 --out "$EXP_ROOT/raw-data/train.jsonl"
+  docker run --rm -v "$BREV_ROOT:/brev" \
+    "$IMAGE" bash -lc '
+PY=/opt/ray_venvs/nemo_rl.models.policy.workers.megatron_policy_worker.MegatronPolicyWorker/bin/python
+$PY /brev/reference-rl-circle-count/3rdparty/Gym-workspace/Gym/resources_servers/circle_count/generate_data.py \
+  --n 4096 --seed-offset 3000000 \
+  --out /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/process-warmstart-grpo-from-94/raw-data/train.jsonl
+'
 fi
 if [[ ! -f "$EXP_ROOT/raw-data/validation.jsonl" ]]; then
-  python3 "$GYM" --n 128 --seed-offset 3100000 --out "$EXP_ROOT/raw-data/validation.jsonl"
+  docker run --rm -v "$BREV_ROOT:/brev" \
+    "$IMAGE" bash -lc '
+PY=/opt/ray_venvs/nemo_rl.models.policy.workers.megatron_policy_worker.MegatronPolicyWorker/bin/python
+$PY /brev/reference-rl-circle-count/3rdparty/Gym-workspace/Gym/resources_servers/circle_count/generate_data.py \
+  --n 128 --seed-offset 3100000 \
+  --out /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/process-warmstart-grpo-from-94/raw-data/validation.jsonl
+'
 fi
 python3 "$SCRIPT/generate_mixed_quadrant_sft.py" \
   --input "$EXP_ROOT/raw-data/train.jsonl" \
