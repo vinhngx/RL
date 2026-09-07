@@ -6,10 +6,11 @@ HOST_REPO=/home/ubuntu/RL
 RUNTIME_REPO=/data/ephemeral/nemo-rl/ubuntu/reference-rl-v060-corrected
 BREV_ROOT=/data/ephemeral/nemo-rl/ubuntu
 CAMPAIGN=$BREV_ROOT/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98
-EXP_ROOT=$CAMPAIGN/object-location-grpo-from-94
+EXP_ROOT=${EXP_ROOT:-$CAMPAIGN/object-location-grpo-from-94}
 SOURCE=$CAMPAIGN/process-warmstart-grpo-from-94/raw-data
 SCRIPT=$HOST_REPO/autobench-solution/autoresearch/qwen3_vl_circle_count
 CONFIG=$SCRIPT/sft_object_location_warmstart_v06.yaml
+EXTRA_OVERRIDES=${EXTRA_OVERRIDES:-}
 
 if [[ -f "$HOST_REPO/.env" ]]; then
   set -a
@@ -38,9 +39,11 @@ docker run --rm --name qwen3-vl-2b-location-warmstart --gpus all --ipc=host \
   -e XDG_CACHE_HOME=/brev/cache/xdg -e WANDB_CACHE_DIR=/brev/cache/wandb \
   -e WANDB_DIR=/runstate/wandb -e RAY_TMPDIR=/runstate/ray -e TMPDIR=/runstate/tmp \
   -e PYTORCH_ALLOC_CONF=expandable_segments:True \
+  -e EXTRA_OVERRIDES \
   "$IMAGE" bash -lc '
 set -euo pipefail
 cd /opt/nemo-rl
 uv run python examples/run_vlm_sft.py \
-  --config examples/configs/recipes/vlm/location_warmstart.yaml
+  --config examples/configs/recipes/vlm/location_warmstart.yaml \
+  $EXTRA_OVERRIDES
 ' 2>&1 | tee "$EXP_ROOT/logs/warmstart.log"
