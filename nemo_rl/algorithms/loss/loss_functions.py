@@ -79,6 +79,129 @@ class DraftCrossEntropyLossFn(LossFunction):
         )
 
 
+class OAPLLossConfig(TypedDict):
+    # β2 weight on the log-probability regression term (paper Eq. 3). The paper's
+    # math experiments use β2 = 1e-3.
+    beta2: float
+    reference_policy_kl_type: NotRequired[str]
+    # Kept for parity with ClippedPGLossConfig wiring (not part of the OAPL objective;
+    # OAPL has no KL-to-reference term). If set non-zero, an extra KL(π || π_ref)
+    # regularizer with this coefficient is added.
+    reference_policy_kl_penalty: NotRequired[float]
+
+
+class OAPLLossDataDict(TypedDict):
+    """Data required by the OAPL loss function (same fields as ClippedPG)."""
+
+    input_ids: torch.Tensor
+    advantages: torch.Tensor
+    prev_logprobs: torch.Tensor
+    generation_logprobs: torch.Tensor
+    reference_policy_logprobs: torch.Tensor
+    token_mask: torch.Tensor
+    sample_mask: torch.Tensor
+    __extra__: Any
+
+
+class OAPLLossFn(LossFunction):
+    """OAPL loss from arXiv:2602.19362 (off-policy RL via optimal-value regression).
+
+    Per sample:
+        residual_i = β2 * (log π_curr(y_i|x) - log π_gen(y_i|x)) - Â*(x, y_i)
+        loss_i = residual_i ** 2
+
+    where π_gen = π_vllm is the (potentially lagged) inference policy that
+    generated the sample, and Â* comes from OAPLAdvantageEstimator:
+
+        V̂*(x) = β1 * ln( mean_i exp(r_i / β1) ),  Â*(x, y_i) = r_i - V̂*(x)
+
+    Deviating from GRPO/Clipped-PG, this objective is minimized identically at
+    the KL-regularized optimum π*(y|x) ∝ π_gen(y|x) exp(r(x,y)/β) regardless
+    of how stale π_gen is — no importance sampling.
+    """
+
+    input_type = LossInputType.LOGPROB
+
+    def __init__(self, cfg: OAPLLossConfig):
+        self.beta2 = cfg["beta2"]
+        self.reference_policy_kl_type = cfg.get("reference_policy_kl_type", "k3")
+        self.reference_policy_kl_penalty = cfg.get("reference_policy_kl_penalty", 0.0)
+        self.loss_type = LossType.SEQUENCE_LEVEL
+
+    def __call__(
+        self,
+        next_token_logprobs: Tensor,
+        data: BatchedDataDict[OAPLLossDataDict],
+        global_valid_seqs: torch.Tensor,
+        global_valid_toks: torch.Tensor,
+    ) -> tuple[torch.Tensor, dict]:
+        curr_logprobs = next_token_logprobs
+        token_mask = data["token_mask"][:, 1:]
+        sample_mask = data["sample_mask"]
+        advantages = data["advantages"][:, 1:]
+        generation_logprobs = data["generation_logprobs"][:, 1:]
+
+        mask = token_mask * sample_mask.unsqueeze(-1)
+        seq_lens = mask.sum(-1).clamp(min=1)  # [B]
+
+        # Sequence-level quantities.
+        curr_sum = (curr_logprobs * mask).sum(-1)  # log π_curr(y|x)
+        gen_sum = (generation_logprobs * mask).sum(-1)  # log π_gen(y|x)
+        target = (advantages * mask).sum(-1) / seq_lens  # Â*(x, y) (constant per sample)
+
+        pred = self.beta2 * (curr_sum - gen_sum)  # [B]
+        residual = pred - target
+        loss_per_sample = residual**2
+
+        # Spread the per-sample loss across its valid tokens (for shape
+        # consistency with downstream wrappers); sum over tokens recovers the
+        # per-sample loss; masked_mean over samples recovers the mean.
+        per_sample = (loss_per_sample / seq_lens).unsqueeze(-1) * mask
+        per_sample = per_sample.sum(-1)
+        loss = masked_mean(
+            per_sample,
+            sample_mask,
+            global_normalization_factor=global_valid_seqs,
+        )
+
+        # Diagnostics consistent with ClippedPGLossFn naming.
+        lp_error = torch.abs(generation_logprobs - curr_logprobs.detach())
+        mult_prob_error = masked_mean(
+            torch.exp(lp_error * mask),
+            mask,
+            global_normalization_factor=global_valid_toks,
+        ).item()
+        gen_kl_error = calculate_kl(
+            logprobs=generation_logprobs,
+            logprobs_reference=curr_logprobs.detach(),
+            kl_type=self.reference_policy_kl_type,
+            input_clamp_value=None,
+            output_clamp_value=None,
+        )
+        gen_kl_error = masked_mean(
+            gen_kl_error,
+            mask,
+            global_normalization_factor=global_valid_toks,
+        ).item()
+
+        metrics = {
+            "loss": loss.item(),
+            "oapl_residual_mse": masked_mean(
+                (residual**2).unsqueeze(-1).expand_as(mask),
+                sample_mask.unsqueeze(-1).expand_as(mask),
+                global_normalization_factor=global_valid_seqs,
+            ).item(),
+            "oapl_pred_logratio_mean": masked_mean(
+                pred.unsqueeze(-1).expand_as(mask) * mask.any(-1).unsqueeze(-1).float(),
+                mask,
+                global_normalization_factor=global_valid_seqs,
+            ).item(),
+            "mult_prob_error": mult_prob_error,
+            "gen_kl_error": gen_kl_error,
+        }
+        return loss, metrics
+
+
 class ClippedPGLossConfig(TypedDict):
     reference_policy_kl_penalty: float
     reference_policy_kl_type: str

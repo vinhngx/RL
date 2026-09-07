@@ -1,0 +1,62 @@
+# OAPL (https://arxiv.org/abs/2602.19362) on Qwen3-1.7B with the DAPO-Math-17K dataset.
+# Single-GPU recipe; the paper's multi-GPU one uses much larger rollout/lr regimes.
+defaults: grpo_math_1B.yaml
+
+oapl:
+  enabled: true
+  beta1: 1.0
+  beta2: 1e-3
+  sync_lag_interval: 50
+
+grpo:
+  adv_estimator:
+    name: "oapl"
+  num_prompts_per_step: 32
+  num_generations_per_prompt: 8
+  normalize_rewards: false
+  use_leave_one_out_baseline: false
+  skip_reference_policy_logprobs_calculation: true
+
+checkpointing:
+  checkpoint_dir: results/oapl_dapo_math_17k
+
+policy:
+  model_name: "Qwen/Qwen3-1.7B"
+  train_global_batch_size: 256
+  train_micro_batch_size: 2
+  logprob_batch_size: 4
+  dynamic_batching:
+    enabled: true
+  max_total_sequence_length: 4096
+  optimizer:
+    kwargs:
+      lr: 1.0e-6
+      betas: [0.9, 0.95]
+      weight_decay: 0.0
+  max_grad_norm: 1.0e-3
+  generation:
+    max_new_tokens: 2048
+    temperature: 1.0
+    top_p: 1.0
+
+data:
+  train:
+    dataset_name: DAPOMath17K
+    split_validation_size: 0.01
+  validation: null
+  default:
+    prompt_file: "examples/prompts/cot.txt"
+    processor: "math_hf_data_processor"
+    env_name: "math"
+
+env:
+  math:
+    num_workers: 8
+    math_verify_impl: "hf_math_verify"
+
+logger:
+  tensorboard_enabled: false
+  wandb_enabled: false
+
+cluster:
+  gpus_per_node: 1

@@ -1,4 +1,15 @@
 # GRPO Algorithm Configuration
+
+# OAPL off-policy objective settings (https://arxiv.org/abs/2602.19362).
+# enabled=false keeps stock GRPO behavior. When enabled, `grpo.adv_estimator.name`
+# should be "oapl" so the optimal-advantage estimate A* replaces the
+# GRPO baseline subtraction.
+oapl:
+  enabled: false
+  beta1: 1.0 # smoothing coefficient of the group value estimate (paper Eq. 2)
+  beta2: 1e-3 # coefficient of the log-probability regression term (paper Eq. 3)
+  sync_lag_interval: 1 # steps between inference-engine refits (paper's L); 1 = synced every step
+
 grpo:
   num_prompts_per_step: 32
   num_generations_per_prompt: 16

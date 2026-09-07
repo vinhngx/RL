@@ -74,6 +74,48 @@ class GRPOAdvantageEstimator:
         return advantages.expand(mask.shape)
 
 
+class OAPLAdvantageEstimator:
+    """OAPL optimal-advantage estimator from arXiv:2602.19362.
+
+    For each prompt group, estimates V̂*(x) = β1 · ln( (1/G) Σ_i exp(r_i/β1) )
+    and returns Â*(x, y) = r(x, y) − V̂*(x), unnormalized.
+    """
+
+    def __init__(self, estimator_config: dict, loss_config: dict):
+        self.beta1 = estimator_config["beta1"]
+
+    def compute_advantage(self, prompt_ids, rewards, mask, **kwargs):
+        """Compute per-group optimal advantages.
+
+        Args:
+            prompt_ids: Tensor of shape [batch_size] identifying the prompt of each sample.
+            rewards: Tensor of shape [batch_size] with the reward of each sample.
+            mask: Response token mask of shape [batch_size, seq_len].
+            **kwargs: Additional arguments (unused).
+
+        Returns:
+            Advantages tensor of shape [batch_size, seq_len].
+        """
+        # Group rewards by prompt id. Compute V̂* in float64 for stability
+        # when β1 is far from the reward scale (r/β1 above/below fp32 eps).
+        unique_ids, inverse = torch.unique(prompt_ids, return_inverse=True)
+        v_star = torch.zeros_like(rewards)
+        rewards64 = rewards.to(torch.float64)
+        for gid in range(unique_ids.shape[0]):
+            gin = inverse == gid
+            r_group = rewards64[gin]
+            # V̂* = β1 · ln( mean(exp(r/β1)) ), computed via logsumexp - ln(G).
+            v = self.beta1 * (
+                torch.logsumexp(r_group / self.beta1, dim=0)
+                - torch.log(
+                    torch.tensor(r_group.numel(), dtype=torch.float64)
+                )
+            )
+            v_star[gin] = v.to(v_star.dtype)
+        advantages = (rewards - v_star).unsqueeze(-1)
+        return advantages.expand(mask.shape)
+
+
 class GDPOAdvantageEstimator:
     """GDPO-style advantage estimator with leave-one-out baseline.
 

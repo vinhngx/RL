@@ -29,12 +29,15 @@ from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from nemo_rl.algorithms.advantage_estimator import (
     GDPOAdvantageEstimator,
     GRPOAdvantageEstimator,
+    OAPLAdvantageEstimator,
     ReinforcePlusPlusAdvantageEstimator,
 )
 from nemo_rl.algorithms.loss import (
     ClippedPGLossConfig,
     ClippedPGLossDataDict,
     ClippedPGLossFn,
+    OAPLLossConfig,
+    OAPLLossFn,
 )
 from nemo_rl.algorithms.loss.interfaces import LossFunction
 from nemo_rl.algorithms.reward_functions import (
@@ -122,14 +125,37 @@ class AsyncGRPOConfig(TypedDict):
 
 
 class AdvEstimatorConfig(TypedDict):
-    """Configuration for advantage estimator (GRPO, GDPO, or Reinforce++)."""
+    """Configuration for advantage estimator (GRPO, GDPO, Reinforce++, or OAPL)."""
 
-    name: str  # "grpo", "gdpo", or "reinforce_plus_plus"
+    name: str  # "grpo", "gdpo", "reinforce_plus_plus", or "oapl"
     # GRPO specific
     normalize_rewards: NotRequired[bool]
     use_leave_one_out_baseline: NotRequired[bool]
     # Reinforce++ specific
     minus_baseline: NotRequired[bool]
+
+
+class OAPLConfig(TypedDict, total=False):
+    """OAPL (Optimal Advantage-based Policy Optimization with Lagged Inference
+    policy) from arXiv:2602.19362.
+
+    Defaults for all keys live in the exemplar YAML
+    (examples/configs/grpo_math_1B.yaml); recipes that enable OAPL must provide
+    all keys (failure to do so raises loudly at setup).
+
+    enabled: Turn on the OAPL loss and lagged-inference refit.
+    beta1: Smoothing coefficient of the group value estimate V̂* (paper Eq. 2).
+    beta2: Coefficient multiplying the log-probability regression term
+        (paper Eq. 3).
+    sync_lag_interval L: Training steps between refits of the inference engine
+        (paper's policy lag L). 1 means refit/synchronize every step (the paper's
+        fully-on-policy case, still without IS).
+    """
+
+    enabled: bool
+    beta1: float
+    beta2: float
+    sync_lag_interval: int
 
 
 class GRPOConfig(TypedDict):
@@ -206,6 +232,7 @@ class MasterConfig(TypedDict):
     logger: GRPOLoggerConfig
     cluster: ClusterConfig
     checkpointing: CheckpointingConfig
+    oapl: NotRequired[OAPLConfig]
 
 
 # ===============================================================================
@@ -375,7 +402,24 @@ def setup(
     # ==========================
     #        Loss Function
     # ==========================
-    loss_fn = ClippedPGLossFn(loss_config)
+    oapl_config: OAPLConfig = master_config.get("oapl", {})
+    if oapl_config.get("enabled", False):
+        assert "beta2" in oapl_config, (
+            "oapl.beta2 is required when oapl.enabled is true "
+            "(see exemplar examples/configs/grpo_math_1B.yaml)"
+        )
+        loss_fn = OAPLLossFn(
+            {
+                "beta2": oapl_config["beta2"],
+                "reference_policy_kl_type": loss_config["reference_policy_kl_type"],
+                "reference_policy_kl_penalty": loss_config[
+                    "reference_policy_kl_penalty"
+                ],
+            }
+        )
+        print("  ✓ Using OAPL loss (off-policy optimal-advantage regression)")
+    else:
+        loss_fn = ClippedPGLossFn(loss_config)
 
     # Validate force_on_policy_ratio
     if loss_config.get("force_on_policy_ratio", False):
@@ -1058,6 +1102,21 @@ def _create_advantage_estimator(master_config: MasterConfig):
     if adv_estimator_name == "gdpo":
         adv_estimator = GDPOAdvantageEstimator(adv_estimator_config, loss_config)
         print("  ✓ Using GDPO advantage estimator (multi-reward)")
+    elif adv_estimator_name == "oapl":
+        oapl_config = master_config.get("oapl")
+        if oapl_config is None or not oapl_config.get("enabled", False):
+            raise ValueError(
+                "adv_estimator.name='oapl' requires the 'oapl' section in the config with 'enabled: true' "
+                "(it supplies beta1)."
+            )
+        assert "beta1" in oapl_config, (
+            "oapl.beta1 is required when adv_estimator.name='oapl' "
+            "(see exemplar examples/configs/grpo_math_1B.yaml)"
+        )
+        adv_estimator = OAPLAdvantageEstimator(
+            {"beta1": oapl_config["beta1"]}, loss_config
+        )
+        print("  ✓ Using OAPL advantage estimator (optimal-advantage, off-policy)")
     elif adv_estimator_name == "grpo":
         adv_estimator = GRPOAdvantageEstimator(adv_estimator_config, loss_config)
         print("  ✓ Using GRPO advantage estimator")
@@ -1370,6 +1429,23 @@ def grpo_train(
     # Initialize advantage estimator
     adv_estimator = _create_advantage_estimator(master_config)
 
+    # OAPL lagged inference: refit the inference engine only every L training
+    # steps so the rollout policy lags behind the trainer. When the refit is
+    # skipped, the loop still offloads the optimizer before generation via the
+    # existing else-branch (prepare_for_generation uses the stale weights).
+    oapl_config: OAPLConfig = master_config.get("oapl", {})
+    oapl_sync_lag = 1
+    if oapl_config.get("enabled", False):
+        assert "sync_lag_interval" in oapl_config, (
+            "oapl.sync_lag_interval is required when oapl.enabled is true "
+            "(see exemplar examples/configs/grpo_math_1B.yaml)"
+        )
+        oapl_sync_lag = oapl_config["sync_lag_interval"]
+        print(
+            f"  ✓ OAPL enabled: beta1={oapl_config['beta1']}, "
+            f"beta2={oapl_config['beta2']}, sync_lag_interval={oapl_sync_lag}"
+        )
+
     # Run validation at the start if configured
     # TODO: Add validation with kv scales if needed
     if val_at_start and current_step == 0:
@@ -1455,7 +1531,11 @@ def grpo_train(
                     flush=True,
                 )
                 with timer.time("prepare_for_generation/total"):
-                    if NEED_REFIT and POLICY_GENERATION_STALE:
+                    if (
+                        NEED_REFIT
+                        and POLICY_GENERATION_STALE
+                        and total_steps % oapl_sync_lag == 0
+                    ):
                         # Compute KV scales if needed for FP8 quantization
                         if sync_kv_scales and kv_scales_cache is None:
                             print("▶ Computing KV cache scales...", flush=True)
@@ -1840,7 +1920,11 @@ def grpo_train(
                     val_at_end and is_last_step
                 ):
                     memory_tracker.snapshot_start_of_stage("Validation", dir())
-                    if NEED_REFIT and POLICY_GENERATION_STALE:
+                    if (
+                        NEED_REFIT
+                        and POLICY_GENERATION_STALE
+                        and total_steps % oapl_sync_lag == 0
+                    ):
                         refit_policy_generation(
                             policy,
                             policy_generation,
