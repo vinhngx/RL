@@ -31,6 +31,8 @@ policy:
   dtensor_cfg:
     lora_cfg:
       enabled: true
+      match_all_linear: false
+      target_modules: ["*language_model*", "*lm_head"]
       exclude_modules: ["*visual*"]
   optimizer:
     kwargs:
