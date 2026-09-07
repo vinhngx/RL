@@ -16,7 +16,7 @@ grpo:
   val_at_start: true
 
 checkpointing:
-  checkpoint_dir: /brev/circle-count-gym/ckpts-rl-on-sft7/qwen3vl2b_rlsft3s15
+  checkpoint_dir: /brev/circle-count-gym/ckpts-rl-on-sft8/qwen3vl2b_rlsft3s15
 
 policy:
   model_name: /brev/circle-count-gym/merged-rlsft3s15
@@ -49,7 +49,7 @@ data:
   shuffle: true
   train:
     dataset_name: circle-count
-    data_path: /brev/circle-count-gym/data/train.jsonl
+    data_path: /brev/circle-count-gym/data/train-mix-hard.jsonl
     split_validation_size: 0
   validation:
     dataset_name: circle-count
