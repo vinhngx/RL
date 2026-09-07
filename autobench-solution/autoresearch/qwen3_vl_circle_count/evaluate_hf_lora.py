@@ -36,6 +36,18 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Optional PEFT adapter; omit for a merged Hugging Face checkpoint.",
     )
+    parser.add_argument(
+        "--second-adapter",
+        type=Path,
+        help="Optional second adapter to combine with --adapter.",
+    )
+    parser.add_argument(
+        "--adapter-weights",
+        type=float,
+        nargs=2,
+        metavar=("FIRST", "SECOND"),
+        help="Weights for a rank-concatenated two-adapter combination.",
+    )
     parser.add_argument("--prompt-file", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", default="Qwen/Qwen3-VL-2B-Instruct")
@@ -91,6 +103,12 @@ def main() -> None:
     args = parse_args()
     if args.temperature < 0:
         raise ValueError("--temperature must be non-negative")
+    if (args.second_adapter is None) != (args.adapter_weights is None):
+        raise ValueError(
+            "--second-adapter and --adapter-weights must be provided together"
+        )
+    if args.second_adapter is not None and args.adapter is None:
+        raise ValueError("--second-adapter requires --adapter")
     torch.manual_seed(args.seed)
     with args.data.open() as source:
         examples = [json.loads(line) for line in source]
@@ -106,11 +124,21 @@ def main() -> None:
         attn_implementation="sdpa",
         device_map="cuda",
     )
-    model = (
-        PeftModel.from_pretrained(base_model, args.adapter)
-        if args.adapter is not None
-        else base_model
-    )
+    if args.adapter is None:
+        model = base_model
+    else:
+        model = PeftModel.from_pretrained(
+            base_model, args.adapter, adapter_name="first"
+        )
+        if args.second_adapter is not None:
+            model.load_adapter(args.second_adapter, adapter_name="second")
+            model.base_model.add_weighted_adapter(
+                adapters=["first", "second"],
+                weights=args.adapter_weights,
+                adapter_name="combined",
+                combination_type="cat",
+            )
+            model.set_adapter("combined")
     model.eval()
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
