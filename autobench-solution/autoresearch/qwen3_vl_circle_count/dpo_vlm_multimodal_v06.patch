@@ -98,3 +98,15 @@ index 0000000..9b6196f
 +                "task_name": [self.task_name] * len(raw_lines),
 +            }
 +        )
+diff --git a/nemo_rl/algorithms/dpo.py b/nemo_rl/algorithms/dpo.py
+index 8986c2a..2b5959a 100644
+--- a/nemo_rl/algorithms/dpo.py
++++ b/nemo_rl/algorithms/dpo.py
+@@ -252,6 +252,7 @@ def setup(
+         cluster=cluster,
+         config=policy_config,
+         tokenizer=tokenizer,
++        processor=tokenizer,
+         weights_path=weights_path,
+         optimizer_path=optimizer_path,
+         init_optimizer=True,
