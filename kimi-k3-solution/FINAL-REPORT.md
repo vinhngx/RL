@@ -26,6 +26,18 @@ then stacked GRPO windows with fresh LoRA on the merged SFT model (lr 5e-5,
 Error signature of the final model: counts ≤7 → 95% correct; counts >7 → 90%
 (GRPO-on-SFT is what lifted the hard band from 48% to 90%).
 
+### Push-beyond-0.95 phase (five more GRPO windows)
+
+Repeated windows from the 0.945 pooled point (LR/LM-only/KL/data-mix variants)
+peaked at val 0.93–0.96 (best: 0.9609 in w7) but none gym-verified above
+0.945. GRPO on this distribution is plateaued at ~0.94–0.95; the residual
+~12 errors per 200 are perception-bound (10-20 circle images). Recommended
+next lever: enumeration-grounded supervision (list target-circle positions,
+then `\boxed{N}`) using a fresh SFT + GRPO cascade.
+
+Best model: merged-rlsft3s15 under
+/ephemeral/nemo-rl/ubuntu/circle-count-gym/ (gym accuracy 0.945).
+
 ## What had to be solved first (infrastructure)
 
 1. **Driver/CUDA blocker.** Host driver 565.57.01 (CUDA 12.7, apt-held by the
