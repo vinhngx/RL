@@ -1,0 +1,72 @@
+diff --git a/nemo_rl/environments/rewards.py b/nemo_rl/environments/rewards.py
+--- a/nemo_rl/environments/rewards.py
++++ b/nemo_rl/environments/rewards.py
+@@ -13,6 +13,7 @@
+ # limitations under the License.
+ import json
+ import re
++from collections import Counter
+ from typing import Callable, Optional
+ 
+ import numpy as np
+@@ -69,6 +70,42 @@ def quadrant_process_reward(
+     return score, total_is_correct and correct_subtotals == 4
+ 
+ 
++def object_location_reward(
++    ground_truth: str, response: str
++) -> tuple[float, Optional[bool]]:
++    """Reward a permutation-invariant set of grid cells plus the boxed count."""
++    try:
++        expected = json.loads(ground_truth)
++    except (json.JSONDecodeError, TypeError):
++        return boxed_numeric_reward(ground_truth, response)
++    if not isinstance(expected, dict) or "points" not in expected:
++        return boxed_numeric_reward(ground_truth, response)
++
++    expected_points = [tuple(map(int, point)) for point in expected["points"]]
++    predicted_points = [
++        (int(x), int(y))
++        for x, y in re.findall(r"\(\s*([0-9])\s*,\s*([0-9])\s*\)", response)
++    ]
++    expected_counter = Counter(expected_points)
++    predicted_counter = Counter(predicted_points)
++    matches = sum((expected_counter & predicted_counter).values())
++    if not expected_points and not predicted_points:
++        location_f1 = 1.0
++    elif not expected_points or not predicted_points:
++        location_f1 = 0.0
++    else:
++        precision = matches / len(predicted_points)
++        recall = matches / len(expected_points)
++        location_f1 = 2 * precision * recall / (precision + recall) if matches else 0.0
++
++    box_match = re.search(r"\\boxed\{(\d+)\}", response)
++    predicted_total = int(box_match.group(1)) if box_match else None
++    total_is_correct = predicted_total == int(expected["total"])
++    locations_are_exact = predicted_counter == expected_counter
++    score = 0.7 * location_f1 + 0.3 * total_is_correct
++    return score, total_is_correct and locations_are_exact
++
++
+ def boxed_numeric_asymmetric_reward(
+     ground_truth: str, response: str
+ ) -> tuple[float, Optional[bool]]:
+diff --git a/nemo_rl/environments/vlm_environment.py b/nemo_rl/environments/vlm_environment.py
+--- a/nemo_rl/environments/vlm_environment.py
++++ b/nemo_rl/environments/vlm_environment.py
+@@ -38,5 +38,6 @@ from nemo_rl.environments.rewards import (
+     exact_answer_alphanumeric_reward,
+     format_reward,
+     quadrant_process_reward,
++    object_location_reward,
+     math_expression_reward,
+ )
+@@ -87,5 +88,7 @@ class VLMVerifyWorker:
+                 reward_func = boxed_numeric_proximity_reward
+             elif reward_func_name == "quadrant_process":
+                 reward_func = quadrant_process_reward
++            elif reward_func_name == "object_location":
++                reward_func = object_location_reward
+             else:
+                 raise ValueError(f"Invalid reward function: {reward_func_name}")
