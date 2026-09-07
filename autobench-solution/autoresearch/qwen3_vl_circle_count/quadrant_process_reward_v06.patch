@@ -44,7 +44,7 @@ diff --git a/nemo_rl/environments/rewards.py b/nemo_rl/environments/rewards.py
 +
 +    fields = {}
 +    for name in ("tl", "tr", "bl", "br"):
-+        match = re.search(rf"\b{name}\s*=\s*(\d+)", response, re.IGNORECASE)
++        match = re.search(rf"\b{name}\b[^\d\n]{{0,24}}(\d+)", response, re.IGNORECASE)
 +        if match:
 +            fields[name] = int(match.group(1))
 +    box_match = re.search(r"\\boxed\{(\d+)\}", response)
