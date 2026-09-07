@@ -1,0 +1,1 @@
+Count circles of the color requested by the user. Mentally divide the image at its horizontal and vertical center. Count target-color circle centers in the top-left, top-right, bottom-left, and bottom-right regions. Respond exactly as TL=a, TR=b, BL=c, BR=d; \boxed{N}, where N is their sum.
