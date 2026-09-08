@@ -96,11 +96,13 @@ class OAPLAdvantageEstimator:
         Returns:
             Advantages tensor of shape [batch_size, seq_len].
         """
-        # Group rewards by prompt id. Compute V̂* in float64 for stability
-        # when β1 is far from the reward scale (r/β1 above/below fp32 eps).
-        unique_ids, inverse = torch.unique(prompt_ids, return_inverse=True)
-        v_star = torch.zeros_like(rewards)
-        rewards64 = rewards.to(torch.float64)
+        # Group rewards by prompt row. prompt_ids is the raw [B, prompt_len]
+        # token matrix (see grpo_train), so group by unique rows instead of
+        # assuming scalar ids.
+        rewards_flat = rewards.reshape(-1)  # tolerate [B] or [B, 1] inputs
+        unique_ids, inverse = torch.unique(prompt_ids, return_inverse=True, dim=0)
+        v_star = torch.zeros_like(rewards_flat)
+        rewards64 = rewards_flat.to(torch.float64)
         for gid in range(unique_ids.shape[0]):
             gin = inverse == gid
             r_group = rewards64[gin]
@@ -112,7 +114,7 @@ class OAPLAdvantageEstimator:
                 )
             )
             v_star[gin] = v.to(v_star.dtype)
-        advantages = (rewards - v_star).unsqueeze(-1)
+        advantages = (rewards_flat - v_star).unsqueeze(-1)
         return advantages.expand(mask.shape)
 
 

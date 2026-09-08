@@ -12,6 +12,10 @@ grpo:
   adv_estimator:
     name: "oapl"
   num_prompts_per_step: 32
+  skip_reference_policy_logprobs_calculation: true
+
+loss_fn:
+  reference_policy_kl_penalty: 0.0
   num_generations_per_prompt: 8
   normalize_rewards: false
   use_leave_one_out_baseline: false
@@ -23,10 +27,15 @@ checkpointing:
 policy:
   model_name: "Qwen/Qwen3-1.7B"
   train_global_batch_size: 256
+  dtensor_cfg:
+    lora_cfg:
+      enabled: true
   train_micro_batch_size: 2
   logprob_batch_size: 4
   dynamic_batching:
     enabled: true
+  sequence_packing:
+    enabled: false
   max_total_sequence_length: 4096
   optimizer:
     kwargs:

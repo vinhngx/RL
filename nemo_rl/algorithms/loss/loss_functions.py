@@ -186,6 +186,7 @@ class OAPLLossFn(LossFunction):
 
         metrics = {
             "loss": loss.item(),
+            "num_valid_samples": sample_mask.sum().item(),
             "oapl_residual_mse": masked_mean(
                 (residual**2).unsqueeze(-1).expand_as(mask),
                 sample_mask.unsqueeze(-1).expand_as(mask),
@@ -197,6 +198,7 @@ class OAPLLossFn(LossFunction):
                 global_normalization_factor=global_valid_seqs,
             ).item(),
             "mult_prob_error": mult_prob_error,
+            "token_mult_prob_error": mult_prob_error,
             "gen_kl_error": gen_kl_error,
         }
         return loss, metrics
