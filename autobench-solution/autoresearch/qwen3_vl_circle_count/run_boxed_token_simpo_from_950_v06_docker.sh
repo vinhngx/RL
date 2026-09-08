@@ -22,11 +22,16 @@ if [[ -f "$HOST_REPO/.env" ]]; then
 fi
 mkdir -p "$ROOT"/{data,artifacts,logs,checkpoints,ray,tmp,wandb}
 
-for patch in "$DPO_PATCH" "$SIMPO_PATCH" "$FOCUS_PATCH"; do
-  if ! git -C "$RUNTIME_REPO" apply --reverse --check "$patch"; then
-    git -C "$RUNTIME_REPO" apply "$patch"
-  fi
-done
+if ! git -C "$RUNTIME_REPO" apply --reverse --check "$DPO_PATCH"; then
+  git -C "$RUNTIME_REPO" apply "$DPO_PATCH"
+fi
+LOSS_FILE=$RUNTIME_REPO/nemo_rl/algorithms/loss/loss_functions.py
+if ! rg -q 'def _simpo_loss' "$LOSS_FILE"; then
+  git -C "$RUNTIME_REPO" apply "$SIMPO_PATCH"
+fi
+if ! rg -q 'self\.preference_difference_only' "$LOSS_FILE"; then
+  git -C "$RUNTIME_REPO" apply "$FOCUS_PATCH"
+fi
 
 python3 "$SCRIPT/generate_direction_matched_vlm_dpo_pairs.py" \
   --data "$CAMPAIGN/fresh-hard-negatives-from-950/data/candidate-pool.jsonl" \
