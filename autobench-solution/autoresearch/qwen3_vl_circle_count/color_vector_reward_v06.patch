@@ -1,0 +1,58 @@
+diff --git a/nemo_rl/environments/rewards.py b/nemo_rl/environments/rewards.py
+--- a/nemo_rl/environments/rewards.py
++++ b/nemo_rl/environments/rewards.py
+@@ -163,6 +163,36 @@ def pixel_location_reward(
+     return score, total_is_correct
+ 
+ 
++def color_vector_reward(
++    ground_truth: str, response: str
++) -> tuple[float, Optional[bool]]:
++    """Reward every exact color count plus the requested boxed count."""
++    try:
++        expected = json.loads(ground_truth)
++    except (json.JSONDecodeError, TypeError):
++        return boxed_numeric_reward(ground_truth, response)
++    if not isinstance(expected, dict) or "color_counts" not in expected:
++        return boxed_numeric_reward(ground_truth, response)
++
++    expected_counts = expected["color_counts"]
++    colors = ("red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink")
++    predicted_counts: dict[str, int] = {}
++    for color in colors:
++        match = re.search(rf"\b{color}\s*[:=]\s*(\d+)\b", response, re.IGNORECASE)
++        if match:
++            predicted_counts[color] = int(match.group(1))
++    exact_components = sum(
++        predicted_counts.get(color) == int(expected_counts[color]) for color in colors
++    )
++    component_score = exact_components / len(colors)
++
++    box_match = re.search(r"\\boxed\{(\d+)\}", response)
++    predicted_total = int(box_match.group(1)) if box_match else None
++    total_is_correct = predicted_total == int(expected["total"])
++    score = 0.75 * component_score + 0.25 * total_is_correct
++    return score, total_is_correct
++
++
+ def boxed_numeric_asymmetric_reward(
+     ground_truth: str, response: str
+ ) -> tuple[float, Optional[bool]]:
+diff --git a/nemo_rl/environments/vlm_environment.py b/nemo_rl/environments/vlm_environment.py
+--- a/nemo_rl/environments/vlm_environment.py
++++ b/nemo_rl/environments/vlm_environment.py
+@@ -40,5 +40,6 @@ from nemo_rl.environments.rewards import (
+     quadrant_process_reward,
+     object_location_reward,
+     pixel_location_reward,
++    color_vector_reward,
+     math_expression_reward,
+ )
+@@ -93,5 +94,7 @@ class VLMVerifyWorker:
+                 reward_func = object_location_reward
+             elif reward_func_name == "pixel_location":
+                 reward_func = pixel_location_reward
++            elif reward_func_name == "color_vector":
++                reward_func = color_vector_reward
+             else:
+                 raise ValueError(f"Invalid reward function: {reward_func_name}")
