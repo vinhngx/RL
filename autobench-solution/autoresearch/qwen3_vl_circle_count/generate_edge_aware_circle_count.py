@@ -81,6 +81,11 @@ def main() -> None:
     parser.add_argument("--examples-per-count", type=int, default=200)
     parser.add_argument("--seed-offset", type=int, default=3_800_000)
     parser.add_argument("--shuffle-seed", type=int, default=42)
+    parser.add_argument(
+        "--preserve-pairs",
+        action="store_true",
+        help="Keep each edge/center pair adjacent instead of shuffling rows.",
+    )
     args = parser.parse_args()
     if args.min_target_count < 0:
         raise ValueError("--min-target-count must be non-negative")
@@ -115,7 +120,8 @@ def main() -> None:
                 )
             example_index += 1
 
-    random.Random(args.shuffle_seed).shuffle(rows)
+    if not args.preserve_pairs:
+        random.Random(args.shuffle_seed).shuffle(rows)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w") as output:
         for row in rows:

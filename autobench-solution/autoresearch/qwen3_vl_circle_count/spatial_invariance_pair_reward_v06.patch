@@ -1,0 +1,50 @@
+diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
+--- a/nemo_rl/algorithms/grpo.py
++++ b/nemo_rl/algorithms/grpo.py
+@@ -136,6 +136,7 @@ class CounterfactualPairRewardConfig(TypedDict):
+ 
+     enabled: bool
+     weight: float
++    expected_delta: NotRequired[int]
+ 
+ 
+ class GRPOConfig(TypedDict):
+@@ -1032,6 +1033,7 @@ def apply_counterfactual_pair_reward(
+     if not config["enabled"]:
+         return repeated_batch
+     weight = float(config["weight"])
++    expected_delta = int(config.get("expected_delta", 1))
+     if not 0.0 < weight <= 1.0:
+         raise ValueError("counterfactual pair reward weight must be in (0, 1]")
+     pair_stride = 2 * num_generations
+@@ -1057,8 +1059,10 @@ def apply_counterfactual_pair_reward(
+         upper_truth = _ground_truth_integer(
+             repeated_batch["extra_env_info"][upper_start]["ground_truth"]
+         )
+-        if lower_truth is None or upper_truth != lower_truth + 1:
+-            raise ValueError("counterfactual ground truths must differ by exactly one")
++        if lower_truth is None or upper_truth != lower_truth + expected_delta:
++            raise ValueError(
++                "paired ground truths must differ by the configured expected_delta"
++            )
+ 
+         for generation in range(num_generations):
+             lower_position = lower_start + generation
+@@ -1071,7 +1075,7 @@ def apply_counterfactual_pair_reward(
+             )
+             if (
+                 lower_prediction is not None
+-                and upper_prediction == lower_prediction + 1
++                and upper_prediction == lower_prediction + expected_delta
+             ):
+                 rewards[lower_position] += weight
+                 rewards[upper_position] += weight
+@@ -1080,7 +1084,8 @@ def apply_counterfactual_pair_reward(
+     repeated_batch["total_reward"] = rewards
+     print(
+         f"Counterfactual consistency matched {matched}/"
+-        f"{repeated_batch.size // 2} rollout pairs (weight={weight:g})."
++        f"{repeated_batch.size // 2} rollout pairs "
++        f"(weight={weight:g}, expected_delta={expected_delta})."
+     )
+     return repeated_batch
