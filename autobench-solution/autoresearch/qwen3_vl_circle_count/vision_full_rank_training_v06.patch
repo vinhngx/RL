@@ -1,0 +1,60 @@
+diff --git a/nemo_rl/models/automodel/setup.py b/nemo_rl/models/automodel/setup.py
+index a539560b0..941a6ec37 100644
+--- a/nemo_rl/models/automodel/setup.py
++++ b/nemo_rl/models/automodel/setup.py
+@@ -17,6 +17,7 @@
+ import importlib
+ import inspect
+ import os
++from fnmatch import fnmatchcase
+ from functools import partial
+ from typing import Any, Optional, Union
+ 
+@@ -56,6 +57,26 @@ STRING_TO_DTYPE = {
+ }
+ 
+ 
++def freeze_parameters_outside_patterns(
++    model: torch.nn.Module, patterns: list[str]
++) -> tuple[int, int]:
++    """Freeze parameters whose fully qualified names match none of ``patterns``."""
++    trainable = 0
++    frozen = 0
++    for name, param in model.named_parameters():
++        should_train = any(fnmatchcase(name, pattern) for pattern in patterns)
++        param.requires_grad_(should_train)
++        if should_train:
++            trainable += param.numel()
++        else:
++            frozen += param.numel()
++    if trainable == 0:
++        raise ValueError(
++            f"trainable_param_patterns matched no parameters: {patterns}"
++        )
++    return trainable, frozen
++
++
+ def _maybe_set_force_hf(automodel_kwargs: dict, model_config) -> None:
+     """Validate and maybe auto-set force_hf based on adapter compatibility.
+ 
+@@ -700,6 +721,20 @@ def setup_model_and_optimizer(
+         if rank == 0:
+             print("Froze visual encoder parameters for text-only training")
+ 
++    trainable_param_patterns = config["dtensor_cfg"].get(
++        "trainable_param_patterns", []
++    )
++    if trainable_param_patterns:
++        trainable, frozen = freeze_parameters_outside_patterns(
++            model, trainable_param_patterns
++        )
++        if rank == 0:
++            print(
++                "Restricted full-parameter training to patterns "
++                f"{trainable_param_patterns}: {trainable:,} trainable and "
++                f"{frozen:,} frozen parameters"
++            )
++
+     # CPU offload if needed
+     if cpu_offload:
+         # Move buffers to CPU for FSDP modules

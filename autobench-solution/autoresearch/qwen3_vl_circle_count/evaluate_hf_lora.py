@@ -60,6 +60,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", default="Qwen/Qwen3-VL-2B-Instruct")
+    parser.add_argument(
+        "--processor-model",
+        help=(
+            "Optional processor source when --model is a weights-only full "
+            "checkpoint; defaults to --model."
+        ),
+    )
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--max-new-tokens", type=int, default=32)
     parser.add_argument(
@@ -136,7 +143,7 @@ def main() -> None:
         examples = examples[: args.limit]
     system_prompt = args.prompt_file.read_text().strip()
 
-    processor = AutoProcessor.from_pretrained(args.model)
+    processor = AutoProcessor.from_pretrained(args.processor_model or args.model)
     processor.tokenizer.padding_side = "left"
     if args.image_pixels is not None:
         processor.image_processor.size = {
