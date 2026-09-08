@@ -1,0 +1,20 @@
+# Short high-rate trajectory on the resolution-rescued native failures. The
+# LR matches the earlier answer-only DPO regime that improved this campaign.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/dpo_crossres_asymmetric_from_950_v06.yaml
+
+dpo:
+  max_num_steps: 6
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/crossres-asymmetric-highlr-dpo/checkpoints
+  keep_top_k: 6
+
+policy:
+  optimizer:
+    kwargs:
+      lr: 1.0e-5
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/crossres-asymmetric-highlr-dpo/logs
+  wandb:
+    name: crossres-asymmetric-highlr-dpo-from-950
