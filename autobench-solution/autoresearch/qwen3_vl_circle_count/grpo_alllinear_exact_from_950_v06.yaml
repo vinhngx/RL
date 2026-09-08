@@ -1,0 +1,51 @@
+# Low-rate all-linear exact GRPO from the 95% vision-only leader. This tests
+# whether decoder attention/answer layers, rather than more vision-only drift,
+# can better exploit the already-strong visual representation.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/grpo_counterfactual_pairs_from_945_v06.yaml
+
+grpo:
+  max_num_steps: 4
+  val_period: 1
+  val_at_start: false
+  max_val_samples: 64
+  seed: 73
+  use_dynamic_sampling: false
+  batch_multiplier: 1
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/alllinear-exact-from-950/checkpoints
+  save_period: 1
+  keep_top_k: 4
+
+policy:
+  model_name: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-pair-grpo/merged-step2
+  tokenizer:
+    name: ${policy.model_name}
+  dtensor_cfg:
+    lora_cfg:
+      enabled: true
+      target_modules: []
+      exclude_modules: []
+      match_all_linear: true
+      dim: 8
+      alpha: 16
+      dropout: 0.0
+      dropout_position: post
+      lora_A_init: xavier
+      use_triton: true
+  optimizer:
+    kwargs:
+      lr: 5.0e-8
+
+loss_fn:
+  reference_policy_kl_penalty: 0.20
+
+data:
+  shuffle: true
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-pair-grpo/data/train.jsonl
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/alllinear-exact-from-950/logs
+  wandb:
+    name: alllinear-exact-grpo-from-950
