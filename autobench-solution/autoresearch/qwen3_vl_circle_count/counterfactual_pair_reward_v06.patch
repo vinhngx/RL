@@ -30,7 +30,7 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
      normalize_rewards: bool
      use_leave_one_out_baseline: bool
      val_period: int
-@@ -975,6 +984,84 @@ def scale_rewards(
+@@ -975,6 +984,92 @@ def scale_rewards(
      return repeated_batch
  
  
@@ -40,6 +40,14 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
 +def _boxed_integer(text: str) -> Optional[int]:
 +    matches = _BOXED_INTEGER_RE.findall(text)
 +    return int(matches[-1]) if matches else None
++
++
++def _ground_truth_integer(text: str) -> Optional[int]:
++    boxed = _boxed_integer(text)
++    if boxed is not None:
++        return boxed
++    stripped = text.strip()
++    return int(stripped) if re.fullmatch(r"-?\d+", stripped) else None
 +
 +
 +def apply_counterfactual_pair_reward(
@@ -78,10 +86,10 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
 +        if upper_indices[0] != lower_indices[0] + 1:
 +            raise ValueError("counterfactual prompts are not adjacent dataset rows")
 +
-+        lower_truth = _boxed_integer(
++        lower_truth = _ground_truth_integer(
 +            repeated_batch["extra_env_info"][lower_start]["ground_truth"]
 +        )
-+        upper_truth = _boxed_integer(
++        upper_truth = _ground_truth_integer(
 +            repeated_batch["extra_env_info"][upper_start]["ground_truth"]
 +        )
 +        if lower_truth is None or upper_truth != lower_truth + 1:
@@ -115,7 +123,7 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
  def _should_use_async_rollouts(master_config: MasterConfig) -> bool:
      """Determine if async rollouts should be used based on the configuration.
  
-@@ -1586,6 +1673,15 @@ def grpo_train(
+@@ -1586,6 +1681,15 @@ def grpo_train(
                      repeated_batch = apply_reward_shaping(
                          repeated_batch, master_config["grpo"]["reward_shaping"]
                      )
