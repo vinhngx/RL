@@ -1,0 +1,22 @@
+# Reference-free preference calibration on only the token positions where the
+# chosen and rejected boxed answers differ. The final four decoder layers are
+# trainable; the vision tower and output head remain frozen.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/dpo_late_decoder_simpo_calibration_from_950_v06.yaml
+
+dpo:
+  preference_difference_only: true
+  max_num_steps: 8
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/boxed-token-simpo-from-950/checkpoints
+
+data:
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/boxed-token-simpo-from-950/data/train.jsonl
+  validation:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/boxed-token-simpo-from-950/data/validation.jsonl
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/boxed-token-simpo-from-950/logs
+  wandb:
+    name: boxed-token-simpo-from-950

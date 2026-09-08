@@ -1,0 +1,40 @@
+diff --git a/nemo_rl/algorithms/loss/loss_functions.py b/nemo_rl/algorithms/loss/loss_functions.py
+index 49c6e5b71..d9789ca20 100755
+--- a/nemo_rl/algorithms/loss/loss_functions.py
++++ b/nemo_rl/algorithms/loss/loss_functions.py
+@@ -785,6 +785,7 @@ class DPOLossConfig(TypedDict):
+     sft_average_log_probs: bool
+     preference_algorithm: NotRequired[str]
+     simpo_gamma: NotRequired[float]
++    preference_difference_only: NotRequired[bool]
+ 
+ 
+ class DPOLossDataDict(TypedDict):
+@@ -863,6 +864,7 @@ class DPOLossFn(PreferenceLossFn):
+         self.sft_average_log_probs = cfg["sft_average_log_probs"]
+         self.preference_algorithm = cfg.get("preference_algorithm", "dpo")
+         self.simpo_gamma = cfg.get("simpo_gamma", 0.0)
++        self.preference_difference_only = cfg.get("preference_difference_only")
+         if self.preference_algorithm not in {"dpo", "simpo"}:
+             raise ValueError(
+                 "preference_algorithm must be either 'dpo' or 'simpo'"
+@@ -899,6 +901,19 @@ class DPOLossFn(PreferenceLossFn):
+     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+         """Compute reference-free SimPO over length-normalized responses."""
+         token_mask = data["token_mask"][:, 1:]
++        if self.preference_difference_only:
++            input_ids = data["input_ids"][:, 1:]
++            pair_difference = input_ids[::2].ne(input_ids[1::2])
++            focused_mask = torch.zeros_like(token_mask)
++            focused_mask[::2] = token_mask[::2] * pair_difference
++            focused_mask[1::2] = token_mask[1::2] * pair_difference
++            missing = focused_mask.sum(-1).eq(0) & data["sample_mask"].bool()
++            if missing.any():
++                raise ValueError(
++                    "preference_difference_only found a valid sequence pair "
++                    "without a differing response token"
++                )
++            token_mask = focused_mask
+         sample_mask = data["sample_mask"]
+         rewards = (next_token_logprobs * token_mask).sum(-1)
+         rewards = rewards / token_mask.sum(-1).clamp(min=1)
