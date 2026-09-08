@@ -43,8 +43,6 @@ policy:
     tensor_parallel_size: 1
     context_parallel_size: 1
     custom_parallel_plan: null
-    automodel_kwargs:
-      attn_implementation: flash_attention_2
     lora_cfg:
       enabled: true
       target_modules:
