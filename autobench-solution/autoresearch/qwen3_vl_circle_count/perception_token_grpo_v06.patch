@@ -31,7 +31,7 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
  
  
  class GRPOSaveState(TypedDict):
-@@ -1801,16 +1825,7 @@ def grpo_train(
+@@ -1801,16 +1825,8 @@ def grpo_train(
 -                    for i, message_log in enumerate(repeated_batch["message_log"]):
 -                        for j, message in enumerate(message_log):
 -                            if message["role"] == "assistant":
@@ -49,11 +49,12 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
 +                    for message_log in repeated_batch["message_log"]:
 +                        for message in message_log:
 +                            _set_grpo_token_loss_mask(
-+                                message, grpo_config.get("perception_token_ids")
++                                message,
++                                master_config["grpo"].get("perception_token_ids"),
 +                            )
  
                      # Convert updated LLMMessageLogType to FlatMessagesType for training
-@@ -2862,16 +2877,7 @@ def async_grpo_train(
+@@ -2862,16 +2878,8 @@ def async_grpo_train(
 -                    for i, message_log in enumerate(repeated_batch["message_log"]):
 -                        for j, message in enumerate(message_log):
 -                            if message["role"] == "assistant":
@@ -71,7 +72,8 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
 +                    for message_log in repeated_batch["message_log"]:
 +                        for message in message_log:
 +                            _set_grpo_token_loss_mask(
-+                                message, grpo_config.get("perception_token_ids")
++                                message,
++                                master_config["grpo"].get("perception_token_ids"),
 +                            )
  
                      # Convert to flat format for training
