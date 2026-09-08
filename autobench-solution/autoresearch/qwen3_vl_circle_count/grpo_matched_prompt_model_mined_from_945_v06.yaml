@@ -1,0 +1,26 @@
+# Revisit model-mined exact GRPO now that VLM training uses the exact
+# deployment system/user prompt. Start from the promoted 189/200 checkpoint.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/grpo_edge_aware_exact_from_94_v06.yaml
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/matched-prompt-model-mined-grpo/checkpoints
+
+policy:
+  model_name: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/matched-prompt-model-mined-grpo/merged-parent
+  tokenizer:
+    name: ${policy.model_name}
+    chat_template: default
+    chat_template_kwargs:
+      enable_thinking: false
+  optimizer:
+    kwargs:
+      lr: 5.0e-7
+
+data:
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/matched-prompt-model-mined-grpo/data/train-mined-failures.jsonl
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/matched-prompt-model-mined-grpo/logs
+  wandb:
+    name: matched-prompt-model-mined-grpo-from-945
