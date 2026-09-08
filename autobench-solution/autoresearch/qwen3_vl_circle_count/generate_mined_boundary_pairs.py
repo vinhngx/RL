@@ -38,6 +38,13 @@ def make_pair(generator, source: dict, *, remove_target: bool, pair_id: int, kin
     else:
         candidates = [i for i, circle in enumerate(source["circles"]) if circle["color"] != target]
     if not candidates:
+        remove_target = not remove_target
+        candidates = [
+            i
+            for i, circle in enumerate(source["circles"])
+            if (circle["color"] == target) == remove_target
+        ]
+    if not candidates:
         return None
 
     changed = copy.deepcopy(source)
