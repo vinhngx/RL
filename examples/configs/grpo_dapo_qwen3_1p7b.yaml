@@ -8,13 +8,15 @@ policy:
   model_name: "Qwen/Qwen3-1.7B"
   train_global_batch_size: 256
   train_micro_batch_size: 2
-  logprob_batch_size: 4
+  logprob_batch_size: 2
+  logprob_chunk_size: 2048
   dynamic_batching:
     enabled: true
   sequence_packing:
     enabled: false
   max_total_sequence_length: 4096
   dtensor_cfg:
+    activation_checkpointing: true
     lora_cfg:
       enabled: true
   optimizer:
