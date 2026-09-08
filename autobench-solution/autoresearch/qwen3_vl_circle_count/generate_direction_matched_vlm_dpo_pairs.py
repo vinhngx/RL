@@ -36,6 +36,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validation-output", type=Path, required=True)
     parser.add_argument("--validation-every", type=int, default=16)
     parser.add_argument("--system-prompt-file", type=Path)
+    parser.add_argument(
+        "--omit-anchors",
+        action="store_true",
+        help="Emit only actual failure preferences, without direction counter-anchors.",
+    )
     return parser.parse_args()
 
 
@@ -217,7 +222,9 @@ def main() -> None:
             if unit_index % args.validation_every == 0
             else "train"
         )
-        outputs[split].extend((failure_pair, anchor_pair))
+        outputs[split].append(failure_pair)
+        if not args.omit_anchors:
+            outputs[split].append(anchor_pair)
 
     for split, output in (
         ("train", args.train_output),
@@ -238,6 +245,7 @@ def main() -> None:
                 "failure_directions": failure_directions,
                 "failures": len(failures),
                 "match_quality": match_counts,
+                "omit_anchors": args.omit_anchors,
                 "train": len(outputs["train"]),
                 "unique_anchors": len(used_anchors),
                 "validation": len(outputs["validation"]),

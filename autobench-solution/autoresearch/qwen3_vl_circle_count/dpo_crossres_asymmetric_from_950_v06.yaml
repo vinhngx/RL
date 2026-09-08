@@ -1,0 +1,32 @@
+# All-linear DPO on only native failures rescued by a complementary low-res
+# view. Unlike the vision-only matched experiment, retain the real 233:3
+# undercount direction rather than cancelling it with synthetic anchors.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/dpo_crossres_vision_from_950_v06.yaml
+
+dpo:
+  max_num_steps: 8
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/crossres-asymmetric-dpo-from-950/checkpoints
+  keep_top_k: 8
+
+policy:
+  dtensor_cfg:
+    lora_cfg:
+      target_modules: []
+      exclude_modules: []
+      match_all_linear: true
+  optimizer:
+    kwargs:
+      lr: 1.0e-6
+
+data:
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/crossres-asymmetric-dpo-from-950/data/train.jsonl
+  validation:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/crossres-asymmetric-dpo-from-950/data/validation.jsonl
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/crossres-asymmetric-dpo-from-950/logs
+  wandb:
+    name: crossres-asymmetric-dpo-from-950
