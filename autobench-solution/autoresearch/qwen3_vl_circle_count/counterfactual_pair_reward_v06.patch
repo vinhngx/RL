@@ -9,7 +9,7 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
  import time
  import warnings
  from concurrent.futures import ThreadPoolExecutor
-@@ -124,12 +125,20 @@ class AdvEstimatorConfig(TypedDict):
+@@ -132,12 +133,20 @@ class AdvEstimatorConfig(TypedDict):
      minus_baseline: NotRequired[bool]
  
  
@@ -30,7 +30,7 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
      normalize_rewards: bool
      use_leave_one_out_baseline: bool
      val_period: int
-@@ -984,6 +993,85 @@ def scale_rewards(
+@@ -975,6 +984,84 @@ def scale_rewards(
      return repeated_batch
  
  
@@ -115,7 +115,7 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
  def _should_use_async_rollouts(master_config: MasterConfig) -> bool:
      """Determine if async rollouts should be used based on the configuration.
  
-@@ -1586,6 +1674,16 @@ def grpo_train(
+@@ -1586,6 +1673,15 @@ def grpo_train(
                      repeated_batch = apply_reward_shaping(
                          repeated_batch, master_config["grpo"]["reward_shaping"]
                      )
