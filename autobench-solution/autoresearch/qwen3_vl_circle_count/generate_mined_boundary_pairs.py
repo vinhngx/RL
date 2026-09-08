@@ -44,6 +44,8 @@ def make_pair(generator, source: dict, *, remove_target: bool, pair_id: int, kin
     index = rng.choice(candidates)
     if remove_target:
         distractors = [circle["color"] for circle in source["circles"] if circle["color"] != target]
+        if not distractors:
+            distractors = [color for color in generator.COLORS if color != target]
         changed["circles"][index]["color"] = rng.choice(distractors)
         low, high = changed, copy.deepcopy(source)
         low_count, high_count = original_count - 1, original_count
