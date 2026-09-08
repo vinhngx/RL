@@ -1,0 +1,31 @@
+# Global-advantage exact-reward probe from the robust 190/200 leader.
+# Standard GRPO gives zero advantage to a prompt when every sampled answer is
+# wrong. Reinforce++ without a per-prompt baseline instead contrasts rewards
+# across the full batch, retaining a corrective signal for confident errors.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/grpo_fresh_paired_counterfactual_from_950_v06.yaml
+
+grpo:
+  max_num_steps: 1
+  val_period: 1
+  val_at_start: true
+  val_at_end: true
+  use_dynamic_sampling: false
+  batch_multiplier: 1
+  adv_estimator:
+    name: reinforce_plus_plus
+    minus_baseline: false
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/reinforcepp-global-counterfactual-from-950/checkpoints
+  save_period: 1
+  keep_top_k: 1
+
+policy:
+  optimizer:
+    kwargs:
+      lr: 2.5e-7
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/reinforcepp-global-counterfactual-from-950/logs
+  wandb:
+    name: reinforcepp-global-counterfactual-from-950
