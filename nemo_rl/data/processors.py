@@ -578,8 +578,30 @@ def vlm_hf_data_processor(
     else:
         user_message_for_chat_template = user_message_for_tokenize
 
+    messages_for_chat_template: list[dict[str, Any]] = []
+    messages_for_tokenize: list[dict[str, Any]] = []
+    if task_data_spec.system_prompt:
+        # Keep the VLM prompt contract aligned with the text processors and
+        # serving/evaluation paths.  The prompt files commonly end in a single
+        # editor newline; chat-template callers use the prompt text itself.
+        system_message = {
+            "role": "system",
+            "content": task_data_spec.system_prompt.strip(),
+        }
+        messages_for_chat_template.append(system_message)
+        # ProcessorMixin's multimodal/tokenizing path iterates typed content
+        # items, even though its text-rendering path accepts a plain string.
+        messages_for_tokenize.append(
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": system_message["content"]}],
+            }
+        )
+    messages_for_chat_template.append(user_message_for_chat_template)
+    messages_for_tokenize.append(user_message_for_tokenize)
+
     string_formatted_dialog = processor.apply_chat_template(
-        [user_message_for_chat_template],
+        messages_for_chat_template,
         tokenize=False,
         add_generation_prompt=True,
     )
@@ -597,7 +619,7 @@ def vlm_hf_data_processor(
         )
     else:
         message = processor.apply_chat_template(
-            [user_message_for_tokenize],
+            messages_for_tokenize,
             tokenize=True,
             add_generation_prompt=True,
             return_tensors="pt",

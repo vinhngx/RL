@@ -1,0 +1,40 @@
+diff --git a/nemo_rl/data/processors.py b/nemo_rl/data/processors.py
+--- a/nemo_rl/data/processors.py
++++ b/nemo_rl/data/processors.py
+@@ -595,15 +595,34 @@ def vlm_hf_data_processor(
+     else:
+         user_message_for_chat_template = user_message
+ 
++    messages_for_chat_template = []
++    messages_for_tokenize = []
++    if task_data_spec.system_prompt:
++        system_message = {
++            "role": "system",
++            "content": task_data_spec.system_prompt.strip(),
++        }
++        messages_for_chat_template.append(system_message)
++        messages_for_tokenize.append(
++            {
++                "role": "system",
++                "content": [
++                    {"type": "text", "text": system_message["content"]}
++                ],
++            }
++        )
++    messages_for_chat_template.append(user_message_for_chat_template)
++    messages_for_tokenize.append(user_message)
++
+     # this is the string-tokenized conversation template for the generation policy (for vllm)
+     string_formatted_dialog = processor.apply_chat_template(
+-        [user_message_for_chat_template],
++        messages_for_chat_template,
+         tokenize=False,
+         add_generation_prompt=True,
+     )
+ 
+     # this is the id-tokenized and image processed conversation template for the policy
+     message: dict = processor.apply_chat_template(
+-        [user_message],
++        messages_for_tokenize,
+         tokenize=True,
+         add_generation_prompt=True,

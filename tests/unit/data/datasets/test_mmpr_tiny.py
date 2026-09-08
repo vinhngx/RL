@@ -194,7 +194,7 @@ _TEST_PROMPT_TEMPLATE = (
 )
 
 
-def _run_processor(tiny_image_path, processor=None):
+def _run_processor(tiny_image_path, processor=None, system_prompt=None):
     """Helper: run vlm_hf_data_processor on an MMPR sample and return
     (result DatumSpec, stub processor with captured_call_text)."""
     from nemo_rl.data.interfaces import TaskDataSpec
@@ -202,6 +202,7 @@ def _run_processor(tiny_image_path, processor=None):
 
     task_data_spec = TaskDataSpec(task_name="mmpr-tiny")
     task_data_spec.prompt = _TEST_PROMPT_TEMPLATE
+    task_data_spec.system_prompt = system_prompt
     processor = processor or _make_stub_nemotron_processor()
     sample = {
         "images": [tiny_image_path],
@@ -293,6 +294,22 @@ class TestVLMProcessorMMPRTiny:
 
         # Negative: the raw dataset string (with <image> prefix) must NOT leak through
         assert _RAW_QUESTION not in vllm_content
+
+    def test_system_prompt_precedes_user_content_in_both_paths(
+        self, tiny_image_path
+    ):
+        result, processor = _run_processor(
+            tiny_image_path,
+            system_prompt="Count carefully and use \\boxed{}.\n",
+        )
+
+        expected = (
+            "Count carefully and use \\boxed{}. "
+            "<image>\n"
+            + _TEST_PROMPT_TEMPLATE.format(_CLEAN_QUESTION)
+        )
+        assert result["vllm_content"] == expected
+        assert processor.captured_call_text == expected
 
     def test_placeholder_conversion_exact_string(self, tiny_image_path):
         """Verify the exact tokenizer input for the placeholder-style processor path.
