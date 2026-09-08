@@ -6,7 +6,7 @@ checkpointing:
 
 policy:
   model_name: "Qwen/Qwen3-1.7B"
-  train_global_batch_size: 256
+  train_global_batch_size: 128
   train_micro_batch_size: 2
   logprob_batch_size: 2
   logprob_chunk_size: 2048
@@ -14,7 +14,7 @@ policy:
     enabled: true
   sequence_packing:
     enabled: false
-  max_total_sequence_length: 4096
+  max_total_sequence_length: 2048
   dtensor_cfg:
     activation_checkpointing: true
     lora_cfg:
@@ -26,12 +26,12 @@ policy:
       weight_decay: 0.0
   max_grad_norm: 1.0e-3
   generation:
-    max_new_tokens: 2048
+    max_new_tokens: 768
     temperature: 1.0
     top_p: 1.0
 
 grpo:
-  num_prompts_per_step: 32
+  num_prompts_per_step: 16
   num_generations_per_prompt: 8
   normalize_rewards: true
   use_leave_one_out_baseline: true
