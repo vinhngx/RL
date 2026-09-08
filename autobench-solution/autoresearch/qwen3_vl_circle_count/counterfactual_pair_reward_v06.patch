@@ -1,0 +1,133 @@
+diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
+--- a/nemo_rl/algorithms/grpo.py
++++ b/nemo_rl/algorithms/grpo.py
+@@ -13,6 +13,7 @@
+ # limitations under the License.
+ import gc
+ import os
++import re
+ import time
+ import warnings
+ from concurrent.futures import ThreadPoolExecutor
+@@ -124,12 +125,20 @@ class AdvEstimatorConfig(TypedDict):
+     minus_baseline: NotRequired[bool]
+ 
+ 
++class CounterfactualPairRewardConfig(TypedDict):
++    """Reward matching generations from adjacent count and count+1 prompts."""
++
++    enabled: bool
++    weight: float
++
++
+ class GRPOConfig(TypedDict):
+     num_prompts_per_step: int
+     num_generations_per_prompt: int
+     max_num_epochs: int
+     max_num_steps: int
+     max_rollout_turns: int
++    counterfactual_pair_reward: NotRequired[CounterfactualPairRewardConfig]
+     normalize_rewards: bool
+     use_leave_one_out_baseline: bool
+     val_period: int
+@@ -984,6 +993,85 @@ def scale_rewards(
+     return repeated_batch
+ 
+ 
++_BOXED_INTEGER_RE = re.compile(r"\\boxed\s*\{\s*(-?\d+)\s*\}")
++
++
++def _boxed_integer(text: str) -> Optional[int]:
++    matches = _BOXED_INTEGER_RE.findall(text)
++    return int(matches[-1]) if matches else None
++
++
++def apply_counterfactual_pair_reward(
++    repeated_batch: BatchedDataDict[DatumSpec],
++    config: CounterfactualPairRewardConfig,
++    num_generations: int,
++) -> BatchedDataDict[DatumSpec]:
++    """Bonus aligned rollouts whose adjacent ground truths and predictions differ by one.
++
++    The input dataset must contain adjacent lower/upper counterfactual prompts and
++    must not be shuffled. Each prompt is repeated ``num_generations`` times, so
++    rollout ``j`` for the lower image is matched with rollout ``j`` for the upper
++    image. Exact task reward remains untouched and the consistency bonus is added
++    symmetrically to both members of a matched rollout pair.
++    """
++    if not config["enabled"]:
++        return repeated_batch
++    weight = float(config["weight"])
++    if not 0.0 < weight <= 1.0:
++        raise ValueError("counterfactual pair reward weight must be in (0, 1]")
++    pair_stride = 2 * num_generations
++    if repeated_batch.size % pair_stride:
++        raise ValueError(
++            "counterfactual pair reward requires a whole number of prompt pairs"
++        )
++
++    rewards = repeated_batch["total_reward"].clone()
++    matched = 0
++    for pair_start in range(0, repeated_batch.size, pair_stride):
++        lower_start = pair_start
++        upper_start = pair_start + num_generations
++        lower_indices = repeated_batch["idx"][lower_start:upper_start]
++        upper_indices = repeated_batch["idx"][upper_start : upper_start + num_generations]
++        if len(set(lower_indices)) != 1 or len(set(upper_indices)) != 1:
++            raise ValueError("counterfactual generations are not prompt-contiguous")
++        if upper_indices[0] != lower_indices[0] + 1:
++            raise ValueError("counterfactual prompts are not adjacent dataset rows")
++
++        lower_truth = _boxed_integer(
++            repeated_batch["extra_env_info"][lower_start]["ground_truth"]
++        )
++        upper_truth = _boxed_integer(
++            repeated_batch["extra_env_info"][upper_start]["ground_truth"]
++        )
++        if lower_truth is None or upper_truth != lower_truth + 1:
++            raise ValueError("counterfactual ground truths must differ by exactly one")
++
++        for generation in range(num_generations):
++            lower_position = lower_start + generation
++            upper_position = upper_start + generation
++            lower_prediction = _boxed_integer(
++                repeated_batch["message_log"][lower_position][-1]["content"]
++            )
++            upper_prediction = _boxed_integer(
++                repeated_batch["message_log"][upper_position][-1]["content"]
++            )
++            if (
++                lower_prediction is not None
++                and upper_prediction == lower_prediction + 1
++            ):
++                rewards[lower_position] += weight
++                rewards[upper_position] += weight
++                matched += 1
++
++    repeated_batch["total_reward"] = rewards
++    print(
++        f"Counterfactual consistency matched {matched}/"
++        f"{repeated_batch.size // 2} rollout pairs (weight={weight:g})."
++    )
++    return repeated_batch
++
++
+ def _should_use_async_rollouts(master_config: MasterConfig) -> bool:
+     """Determine if async rollouts should be used based on the configuration.
+ 
+@@ -1586,6 +1674,16 @@ def grpo_train(
+                     repeated_batch = apply_reward_shaping(
+                         repeated_batch, master_config["grpo"]["reward_shaping"]
+                     )
++                pair_reward_config = master_config["grpo"].get(
++                    "counterfactual_pair_reward"
++                )
++                if pair_reward_config and pair_reward_config["enabled"]:
++                    repeated_batch = apply_counterfactual_pair_reward(
++                        repeated_batch,
++                        pair_reward_config,
++                        master_config["grpo"]["num_generations_per_prompt"],
++                    )
+ 
+                 # Calculate rewards & advantages
+                 memory_tracker.snapshot_start_of_stage("Processing rewards", dir())
