@@ -5,7 +5,7 @@ IMAGE=${IMAGE:-nvcr.io/nvidia/nemo-rl:v0.6.0}
 HOST_REPO=/home/ubuntu/RL
 BREV_ROOT=/data/ephemeral/nemo-rl/ubuntu
 CAMPAIGN=$BREV_ROOT/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98
-ROOT=$CAMPAIGN/pair-consistency-grpo
+ROOT=$CAMPAIGN/pair-consistency-grpo-v2
 
 mkdir -p "$ROOT/evals"
 docker run --rm --gpus all --ipc=host \

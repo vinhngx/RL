@@ -13,7 +13,7 @@ grpo:
     weight: 0.25
 
 checkpointing:
-  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/pair-consistency-grpo/checkpoints
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/pair-consistency-grpo-v2/checkpoints
   save_period: 1
 
 policy:
@@ -30,6 +30,6 @@ data:
     data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-pair-grpo/data/train.jsonl
 
 logger:
-  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/pair-consistency-grpo/logs
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/pair-consistency-grpo-v2/logs
   wandb:
-    name: pair-consistency-grpo-from-950
+    name: pair-consistency-grpo-v2-from-950

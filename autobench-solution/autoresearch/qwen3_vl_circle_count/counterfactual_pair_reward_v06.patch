@@ -30,7 +30,7 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
      normalize_rewards: bool
      use_leave_one_out_baseline: bool
      val_period: int
-@@ -975,6 +984,92 @@ def scale_rewards(
+@@ -975,6 +984,102 @@ def scale_rewards(
      return repeated_batch
  
  
@@ -48,6 +48,16 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
 +        return boxed
 +    stripped = text.strip()
 +    return int(stripped) if re.fullmatch(r"-?\d+", stripped) else None
++
++
++def _last_boxed_assistant_integer(
++    message_log: list[dict[str, object]],
++) -> Optional[int]:
++    for message in reversed(message_log):
++        if message.get("role") == "assistant":
++            content = message.get("content")
++            return _boxed_integer(content) if isinstance(content, str) else None
++    return None
 +
 +
 +def apply_counterfactual_pair_reward(
@@ -98,11 +108,11 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
 +        for generation in range(num_generations):
 +            lower_position = lower_start + generation
 +            upper_position = upper_start + generation
-+            lower_prediction = _boxed_integer(
-+                repeated_batch["message_log"][lower_position][-1]["content"]
++            lower_prediction = _last_boxed_assistant_integer(
++                repeated_batch["message_log"][lower_position]
 +            )
-+            upper_prediction = _boxed_integer(
-+                repeated_batch["message_log"][upper_position][-1]["content"]
++            upper_prediction = _last_boxed_assistant_integer(
++                repeated_batch["message_log"][upper_position]
 +            )
 +            if (
 +                lower_prediction is not None
@@ -123,7 +133,7 @@ diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
  def _should_use_async_rollouts(master_config: MasterConfig) -> bool:
      """Determine if async rollouts should be used based on the configuration.
  
-@@ -1586,6 +1681,15 @@ def grpo_train(
+@@ -1586,6 +1691,15 @@ def grpo_train(
                      repeated_batch = apply_reward_shaping(
                          repeated_batch, master_config["grpo"]["reward_shaping"]
                      )

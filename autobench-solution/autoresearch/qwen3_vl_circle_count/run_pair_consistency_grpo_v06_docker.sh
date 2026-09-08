@@ -7,7 +7,7 @@ RUNTIME_REPO=/data/ephemeral/nemo-rl/ubuntu/reference-rl-v060-corrected
 BREV_ROOT=/data/ephemeral/nemo-rl/ubuntu
 CAMPAIGN=$BREV_ROOT/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98
 SOURCE=$CAMPAIGN/counterfactual-pair-grpo
-ROOT=$CAMPAIGN/pair-consistency-grpo
+ROOT=$CAMPAIGN/pair-consistency-grpo-v2
 SCRIPT=$HOST_REPO/autobench-solution/autoresearch/qwen3_vl_circle_count
 CONFIG=/workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/grpo_pair_consistency_from_950_v06.yaml
 PARENT=$SOURCE/merged-step2
@@ -39,7 +39,7 @@ $PY /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/merge_qw
 '
 fi
 
-docker run --rm --name qwen3-vl-2b-pair-consistency-grpo \
+docker run --rm --name qwen3-vl-2b-pair-consistency-grpo-v2 \
   --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
   -v "$BREV_ROOT:/brev" -v "$ROOT/ray:/ray" \
   -v "$RUNTIME_REPO:/opt/nemo-rl" -v "$HOST_REPO:/workspace/RL:ro" \
