@@ -1,0 +1,77 @@
+diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
+--- a/nemo_rl/algorithms/grpo.py
++++ b/nemo_rl/algorithms/grpo.py
+@@ -179,5 +179,29 @@ class GRPOConfig(TypedDict):
+     # Advantage estimator configuration (grpo or reinforce_plus_plus)
+     adv_estimator: NotRequired[AdvEstimatorConfig]
++    # Optional generated-token IDs that receive policy-gradient credit. When
++    # omitted, standard GRPO trains every generated assistant token.
++    perception_token_ids: NotRequired[list[int]]
++
++
++def _set_grpo_token_loss_mask(
++    message: dict[str, Any], perception_token_ids: Optional[list[int]] = None
++) -> None:
++    """Mark generated assistant tokens selected for policy-gradient credit."""
++    token_ids = message["token_ids"]
++    if message["role"] != "assistant":
++        message["token_loss_mask"] = torch.zeros_like(token_ids)
++    elif not perception_token_ids:
++        message["token_loss_mask"] = torch.ones_like(token_ids)
++    else:
++        token_loss_mask = torch.zeros_like(token_ids)
++        for token_id in perception_token_ids:
++            token_loss_mask |= token_ids == token_id
++        message["token_loss_mask"] = token_loss_mask
++
++    if "generation_logprobs" not in message:
++        message["generation_logprobs"] = torch.zeros_like(
++            token_ids, dtype=torch.float32
++        )
+ 
+ 
+ class GRPOSaveState(TypedDict):
+@@ -1801,16 +1825,7 @@ def grpo_train(
+-                    for i, message_log in enumerate(repeated_batch["message_log"]):
+-                        for j, message in enumerate(message_log):
+-                            if message["role"] == "assistant":
+-                                message["token_loss_mask"] = torch.ones_like(
+-                                    message["token_ids"]
+-                                )
+-                            else:
+-                                message["token_loss_mask"] = torch.zeros_like(
+-                                    message["token_ids"]
+-                                )
+-                            if "generation_logprobs" not in message:
+-                                message["generation_logprobs"] = torch.zeros_like(
+-                                    message["token_ids"], dtype=torch.float32
+-                                )
++                    for message_log in repeated_batch["message_log"]:
++                        for message in message_log:
++                            _set_grpo_token_loss_mask(
++                                message, grpo_config.get("perception_token_ids")
++                            )
+ 
+                     # Convert updated LLMMessageLogType to FlatMessagesType for training
+@@ -2862,16 +2877,7 @@ def async_grpo_train(
+-                    for i, message_log in enumerate(repeated_batch["message_log"]):
+-                        for j, message in enumerate(message_log):
+-                            if message["role"] == "assistant":
+-                                message["token_loss_mask"] = torch.ones_like(
+-                                    message["token_ids"]
+-                                )
+-                            else:
+-                                message["token_loss_mask"] = torch.zeros_like(
+-                                    message["token_ids"]
+-                                )
+-                            if "generation_logprobs" not in message:
+-                                message["generation_logprobs"] = torch.zeros_like(
+-                                    message["token_ids"], dtype=torch.float32
+-                                )
++                    for message_log in repeated_batch["message_log"]:
++                        for message in message_log:
++                            _set_grpo_token_loss_mask(
++                                message, grpo_config.get("perception_token_ids")
++                            )
+ 
+                     # Convert to flat format for training
