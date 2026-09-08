@@ -1,0 +1,120 @@
+diff --git a/nemo_rl/environments/rewards.py b/nemo_rl/environments/rewards.py
+--- a/nemo_rl/environments/rewards.py
++++ b/nemo_rl/environments/rewards.py
+@@ -19,5 +19,6 @@ from typing import Callable, Optional
+ 
+ import numpy as np
++from scipy.optimize import linear_sum_assignment
+ from math_verify.errors import TimeoutException
+ from math_verify.metric import math_metric
+ from math_verify.parser import ExprExtractionConfig, LatexExtractionConfig
+@@ -161,6 +162,91 @@ def pixel_location_reward(
+     return score, total_is_correct
+ 
+ 
++def grounded_counting_multireward(
++    ground_truth: str, response: str
++) -> tuple[float, Optional[bool]]:
++    """Paper-style point-grounded counting reward with five balanced terms.
++
++    The components are structured format, number of points, Hungarian-matched
++    spatial accuracy, point/count consistency, and exact boxed count.  Each
++    term lies in [0, 1] and contributes equally.
++    """
++    try:
++        expected = json.loads(ground_truth)
++    except (json.JSONDecodeError, TypeError):
++        return boxed_numeric_reward(ground_truth, response)
++    if (
++        not isinstance(expected, dict)
++        or expected.get("coordinate_space") != "pixel"
++        or "points" not in expected
++    ):
++        return boxed_numeric_reward(ground_truth, response)
++
++    expected_points = np.asarray(expected["points"], dtype=np.float64).reshape(-1, 2)
++    expected_total = int(expected["total"])
++    predicted_points = [
++        (int(x), int(y))
++        for x, y in re.findall(
++            r"<\s*(\d{1,3})\s*,\s*(\d{1,3})\s*>", response
++        )
++        if int(x) <= 999 and int(y) <= 999
++    ][:64]
++    predicted_array = np.asarray(predicted_points, dtype=np.float64).reshape(-1, 2)
++
++    answer_match = re.search(
++        r"<answer>\s*\\boxed\{(\d+)\}\s*</answer>", response, re.IGNORECASE
++    )
++    predicted_total = int(answer_match.group(1)) if answer_match else None
++    format_score = float(
++        re.fullmatch(
++            r"\s*<think>[\s\S]*</think>\s*"
++            r"<answer>\s*\\boxed\{\d+\}\s*</answer>\s*",
++            response,
++            re.IGNORECASE,
++        )
++        is not None
++    )
++
++    num_predicted = len(predicted_points)
++    if expected_total == 0:
++        num_points_score = float(num_predicted == 0)
++    else:
++        num_points_score = 1.0 - min(
++            1.0, abs(num_predicted - expected_total) / expected_total
++        )
++
++    if len(expected_points) == 0 and num_predicted == 0:
++        points_score = 1.0
++    elif len(expected_points) == 0 or num_predicted == 0:
++        points_score = 0.0
++    else:
++        distances = np.linalg.norm(
++            expected_points[:, None, :] - predicted_array[None, :, :], axis=2
++        )
++        expected_indices, predicted_indices = linear_sum_assignment(distances)
++        matched_scores = np.maximum(
++            0.0, 1.0 - distances[expected_indices, predicted_indices] / 800.0
++        )
++        points_score = float(np.mean(matched_scores))
++
++    consistency_score = float(
++        predicted_total is not None and predicted_total == num_predicted
++    )
++    count_score = float(predicted_total == expected_total)
++    score = float(
++        np.mean(
++            (
++                format_score,
++                num_points_score,
++                points_score,
++                consistency_score,
++                count_score,
++            )
++        )
++    )
++    return score, count_score == 1.0
++
++
+ def color_vector_reward(
+     ground_truth: str, response: str
+ ) -> tuple[float, Optional[bool]]:
+diff --git a/nemo_rl/environments/vlm_environment.py b/nemo_rl/environments/vlm_environment.py
+--- a/nemo_rl/environments/vlm_environment.py
++++ b/nemo_rl/environments/vlm_environment.py
+@@ -41,5 +41,6 @@ from nemo_rl.environments.rewards import (
+     object_location_reward,
+     pixel_location_reward,
+     color_vector_reward,
++    grounded_counting_multireward,
+     math_expression_reward,
+ )
+@@ -96,5 +97,7 @@ class VLMVerifyWorker:
+                 reward_func = pixel_location_reward
+             elif reward_func_name == "color_vector":
+                 reward_func = color_vector_reward
++            elif reward_func_name == "grounded_counting_multireward":
++                reward_func = grounded_counting_multireward
+             else:
+                 raise ValueError(f"Invalid reward function: {reward_func_name}")

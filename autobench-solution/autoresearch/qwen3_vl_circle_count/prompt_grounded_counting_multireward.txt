@@ -1,0 +1,12 @@
+First enumerate every circle of the requested color by its approximate center, using integer image coordinates from 0 to 999. Put the reasoning in <think> tags and the final boxed count in <answer> tags. Use one <x,y> point per counted circle and no points for other colors.
+
+Examples:
+Question: How many red circles are in the image?
+Response: <think>I spot red circles at <140,220>, <530,410>, and <810,760>. Therefore I see 3 red circles.</think><answer>\boxed{{3}}</answer>
+
+Question: How many cyan circles are in the image?
+Response: <think>I spot cyan circles at <275,180> and <620,845>. Therefore I see 2 cyan circles.</think><answer>\boxed{{2}}</answer>
+
+Now answer the user's question using exactly the same structure. End with <answer>\boxed{{N}}</answer>.
+
+{}
