@@ -3,7 +3,7 @@ diff --git a/nemo_automodel/components/distributed/parallelizer.py b/nemo_automo
 +++ b/nemo_automodel/components/distributed/parallelizer.py
 @@ -211,7 +211,16 @@ class DTensorParallelizer:
                  pass  # transformers < 5.3.0, fall through to sub-module wrapping
- 
+
              if _use_hf_native_grad_ckpt:
 -                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
 +                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
