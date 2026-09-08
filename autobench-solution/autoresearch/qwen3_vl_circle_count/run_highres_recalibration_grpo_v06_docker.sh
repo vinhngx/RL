@@ -4,6 +4,7 @@ set -euo pipefail
 IMAGE=${IMAGE:-nvcr.io/nvidia/nemo-rl:v0.6.0}
 HOST_REPO=/home/ubuntu/RL
 RUNTIME_REPO=/data/ephemeral/nemo-rl/ubuntu/reference-rl-v060-corrected
+GYM_SOURCE=/data/ephemeral/nemo-rl/ubuntu/reference-rl-circle-count/3rdparty/Gym-workspace/Gym
 BREV_ROOT=/data/ephemeral/nemo-rl/ubuntu
 CAMPAIGN=$BREV_ROOT/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98
 ROOT=$CAMPAIGN/highres-recalibration-grpo
@@ -38,10 +39,11 @@ fi
 
 if [[ ! -s "$ROOT/data/train.jsonl" ]]; then
   docker run --rm -v "$HOST_REPO:/workspace/RL:ro" -v "$BREV_ROOT:/brev" \
+    -v "$GYM_SOURCE:/gym:ro" \
     "$IMAGE" bash -lc '
-cd /opt/nemo-rl
-uv run python /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/generate_balanced_circle_count.py \
-  --generator /opt/nemo-rl/3rdparty/Gym-workspace/Gym/resources_servers/circle_count/generate_data.py \
+PY=/opt/nemo_rl_venv/bin/python
+$PY /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/generate_balanced_circle_count.py \
+  --generator /gym/resources_servers/circle_count/generate_data.py \
   --output /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/highres-recalibration-grpo/data/train.jsonl \
   --count-quotas 0:64,1:128,2:192,3:256,4:256,5:256,6:256,7:192,8:160,9:128,10:64,11:48,12:32,13:32,14:16 \
   --seed-offset 3700000
