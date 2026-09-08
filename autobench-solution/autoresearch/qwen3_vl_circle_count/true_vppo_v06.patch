@@ -117,7 +117,7 @@
 +            mean_normalized = normalized.mean().clamp(min=1e-8)
 +            scaling_max = scaling_min + (1.0 - scaling_min) / mean_normalized
 +            scaling = scaling_min + normalized * (scaling_max - scaling_min)
-+            train_data["advantages"] *= scaling.unsqueeze(1)
++            train_data["advantages"] = train_data["advantages"] * scaling.unsqueeze(1)
 +
 +    selected_scores = perception[selected]
 +    rejected_scores = perception[response_mask & ~selected]
