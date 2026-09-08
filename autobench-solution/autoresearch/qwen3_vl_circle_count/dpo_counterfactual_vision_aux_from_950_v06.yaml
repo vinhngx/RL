@@ -27,7 +27,7 @@ policy:
   train_global_batch_size: 16
   train_micro_batch_size: 2
   dtensor_cfg:
-    activation_checkpointing: false
+    activation_checkpointing: true
     counterfactual_vision_aux:
       enabled: true
       merge_size: 2

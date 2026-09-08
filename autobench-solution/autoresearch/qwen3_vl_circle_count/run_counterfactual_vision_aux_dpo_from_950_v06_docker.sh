@@ -12,6 +12,8 @@ ROOT=$CAMPAIGN/counterfactual-vision-aux-dpo-from-950
 SCRIPT=$HOST_REPO/autobench-solution/autoresearch/qwen3_vl_circle_count
 DPO_PATCH=$SCRIPT/dpo_vlm_multimodal_v06.patch
 AUX_PATCH=$SCRIPT/counterfactual_vision_aux_v06.patch
+AUTOMODEL_ROOT=$RUNTIME_REPO/3rdparty/Automodel-workspace/Automodel
+CHECKPOINT_PATCH=$SCRIPT/automodel_nonreentrant_checkpoint_v06.patch
 CONFIG=/workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/dpo_counterfactual_vision_aux_from_950_v06.yaml
 
 if [[ -f "$HOST_REPO/.env" ]]; then
@@ -27,6 +29,9 @@ if ! git -C "$RUNTIME_REPO" apply --reverse --check "$DPO_PATCH"; then
 fi
 if ! git -C "$RUNTIME_REPO" apply --reverse --check "$AUX_PATCH"; then
   git -C "$RUNTIME_REPO" apply "$AUX_PATCH"
+fi
+if ! git -C "$AUTOMODEL_ROOT" apply --reverse --check "$CHECKPOINT_PATCH"; then
+  git -C "$AUTOMODEL_ROOT" apply "$CHECKPOINT_PATCH"
 fi
 
 python3 "$SCRIPT/generate_counterfactual_vlm_preferences.py" \
