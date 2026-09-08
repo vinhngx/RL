@@ -24,11 +24,14 @@ for STEP in 2 4 6 8 10 12 14 16; do
   ADAPTER=$ROOT/checkpoints/step_$STEP/policy/weights/model
   [[ -f $ADAPTER/adapter_config.json ]] || continue
   SMOKE=$ROOT/evals/step-$STEP-smoke64.jsonl
-  $PY $SCRIPT/evaluate_hf_lora.py \
-    --data $DATA --model $BASE --adapter $ADAPTER \
-    --prompt-file $SCRIPT/prompt_gym_boxed.txt --output $SMOKE \
-    --batch-size 4 --max-new-tokens 128 --temperature 0 --seed 42 --limit 64
-  CORRECT=$(sed -n "s/.*\"correct\": *\([0-9][0-9]*\).*/\1/p" "$SMOKE.summary.json" | head -1)
+  SUMMARY=${SMOKE%.jsonl}.summary.json
+  if [[ ! -f $SUMMARY ]]; then
+    $PY $SCRIPT/evaluate_hf_lora.py \
+      --data $DATA --model $BASE --adapter $ADAPTER \
+      --prompt-file $SCRIPT/prompt_gym_boxed.txt --output $SMOKE \
+      --batch-size 4 --max-new-tokens 128 --temperature 0 --seed 42 --limit 64
+  fi
+  CORRECT=$(sed -n "s/.*\"correct\": *\([0-9][0-9]*\).*/\1/p" "$SUMMARY" | head -1)
   if (( CORRECT >= 59 )); then
     $PY $SCRIPT/evaluate_hf_lora.py \
       --data $DATA --model $BASE --adapter $ADAPTER \
