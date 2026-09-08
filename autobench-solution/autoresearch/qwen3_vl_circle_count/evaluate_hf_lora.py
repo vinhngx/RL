@@ -49,6 +49,15 @@ def parse_args() -> argparse.Namespace:
         help="Weights for a rank-concatenated two-adapter combination.",
     )
     parser.add_argument("--prompt-file", type=Path, required=True)
+    parser.add_argument(
+        "--prompt-role",
+        choices=("system", "user"),
+        default="system",
+        help=(
+            "Place the prompt in a system message, or format it with the raw "
+            "question as the VLM rollout processor does for a user message."
+        ),
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", default="Qwen/Qwen3-VL-2B-Instruct")
     parser.add_argument("--batch-size", type=int, default=4)
@@ -149,22 +158,36 @@ def main() -> None:
             batch_examples = examples[batch_start : batch_start + args.batch_size]
             batch = [unpack_example(example) for example in batch_examples]
             images = [item[0] for item in batch]
-            messages = [
-                [
-                    {
-                        "role": "system",
-                        "content": system_prompt,
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "image", "image": image},
-                            {"type": "text", "text": question},
-                        ],
-                    },
+            if args.prompt_role == "system":
+                messages = [
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "image", "image": image},
+                                {"type": "text", "text": question},
+                            ],
+                        },
+                    ]
+                    for image, question, _, _ in batch
                 ]
-                for image, question, _, _ in batch
-            ]
+            else:
+                messages = [
+                    [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "image", "image": image},
+                                {
+                                    "type": "text",
+                                    "text": system_prompt.format(question),
+                                },
+                            ],
+                        }
+                    ]
+                    for image, question, _, _ in batch
+                ]
             texts = [
                 processor.apply_chat_template(
                     message,
@@ -259,6 +282,7 @@ def main() -> None:
         "max_new_tokens": args.max_new_tokens,
         "temperature": args.temperature,
         "seed": args.seed,
+        "prompt_role": args.prompt_role,
         "by_expected_count": dict(sorted(by_count.items())),
         "by_target_color": dict(sorted(by_color.items())),
     }
