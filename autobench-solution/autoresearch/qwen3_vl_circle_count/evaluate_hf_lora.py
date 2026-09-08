@@ -69,6 +69,15 @@ def parse_args() -> argparse.Namespace:
         help="Sampling temperature; zero selects deterministic greedy decoding.",
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--image-pixels",
+        type=int,
+        help=(
+            "Optional target image area for the native Qwen image processor. "
+            "Setting both processor area bounds to this value produces a "
+            "deterministic single-resolution evaluation."
+        ),
+    )
     parser.add_argument("--limit", type=int)
     return parser.parse_args()
 
@@ -112,6 +121,8 @@ def main() -> None:
     args = parse_args()
     if args.temperature < 0:
         raise ValueError("--temperature must be non-negative")
+    if args.image_pixels is not None and args.image_pixels <= 0:
+        raise ValueError("--image-pixels must be positive")
     if (args.second_adapter is None) != (args.adapter_weights is None):
         raise ValueError(
             "--second-adapter and --adapter-weights must be provided together"
@@ -127,6 +138,11 @@ def main() -> None:
 
     processor = AutoProcessor.from_pretrained(args.model)
     processor.tokenizer.padding_side = "left"
+    if args.image_pixels is not None:
+        processor.image_processor.size = {
+            "shortest_edge": args.image_pixels,
+            "longest_edge": args.image_pixels,
+        }
     base_model = AutoModelForImageTextToText.from_pretrained(
         args.model,
         dtype=torch.bfloat16,
@@ -282,6 +298,7 @@ def main() -> None:
         "max_new_tokens": args.max_new_tokens,
         "temperature": args.temperature,
         "seed": args.seed,
+        "image_pixels": args.image_pixels,
         "prompt_role": args.prompt_role,
         "by_expected_count": dict(sorted(by_count.items())),
         "by_target_color": dict(sorted(by_color.items())),
