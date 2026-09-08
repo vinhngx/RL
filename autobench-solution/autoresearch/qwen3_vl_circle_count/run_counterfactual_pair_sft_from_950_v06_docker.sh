@@ -20,10 +20,12 @@ fi
 
 mkdir -p "$EXP_ROOT"/{data,sft-data,hf-datasets-cache,logs,checkpoints,ray,tmp,wandb}
 if [[ ! -f "$RAW" ]]; then
-  python3 "$SCRIPT/generate_counterfactual_circle_pairs.py" \
-    --generator "$BREV_ROOT/reference-rl-circle-count/3rdparty/Gym-workspace/Gym/resources_servers/circle_count/generate_data.py" \
-    --output "$RAW" --pairs 4096 --min-target-count 4 --max-target-count 10 \
-    --seed-offset 8000000
+  docker run --rm -v "$BREV_ROOT:/brev" -v "$HOST_REPO:/workspace/RL:ro" \
+    "$IMAGE" python3 /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/generate_counterfactual_circle_pairs.py \
+      --generator /brev/reference-rl-circle-count/3rdparty/Gym-workspace/Gym/resources_servers/circle_count/generate_data.py \
+      --output /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-pair-sft-from-950/data/pairs.jsonl \
+      --pairs 4096 --min-target-count 4 --max-target-count 10 \
+      --seed-offset 8000000
 fi
 python3 "$SCRIPT/convert_counterfactual_pairs_to_sft.py" \
   --input "$RAW" --output "$EXP_ROOT/sft-data/train.jsonl" \
