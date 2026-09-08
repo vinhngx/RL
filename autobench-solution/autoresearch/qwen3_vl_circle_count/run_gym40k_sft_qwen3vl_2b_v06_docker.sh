@@ -8,7 +8,8 @@ BREV_ROOT=/data/ephemeral/nemo-rl/ubuntu
 CAMPAIGN=$BREV_ROOT/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98
 EXP_ROOT=$CAMPAIGN/gym40k-sft-original-2b
 SCRIPT=$HOST_REPO/autobench-solution/autoresearch/qwen3_vl_circle_count
-CONFIG=$SCRIPT/sft_gym40k_qwen3vl_2b_v06.yaml
+CONFIG=${CONFIG:-$SCRIPT/sft_gym40k_qwen3vl_2b_v06.yaml}
+SFT_EXTRA_ARGS=${SFT_EXTRA_ARGS:-}
 
 if [[ -f "$HOST_REPO/.env" ]]; then
   set -a
@@ -38,6 +39,7 @@ docker run --rm --name qwen3-vl-2b-gym40k-sft --gpus all --ipc=host \
   -v "$RUNTIME_REPO:/opt/nemo-rl" \
   -v "$CONFIG:/opt/nemo-rl/examples/configs/recipes/vlm/gym40k.yaml:ro" \
   -e WANDB_API_KEY -e HF_TOKEN \
+  -e SFT_EXTRA_ARGS \
   -e HF_HOME=/brev/cache/huggingface -e HF_HUB_CACHE=/brev/cache/huggingface/hub \
   -e HF_DATASETS_CACHE=/runstate/hf-datasets-cache \
   -e TRANSFORMERS_CACHE=/brev/cache/huggingface/transformers \
@@ -49,5 +51,5 @@ docker run --rm --name qwen3-vl-2b-gym40k-sft --gpus all --ipc=host \
 set -euo pipefail
 cd /opt/nemo-rl
 uv run python examples/run_vlm_sft.py \
-  --config examples/configs/recipes/vlm/gym40k.yaml
+  --config examples/configs/recipes/vlm/gym40k.yaml $SFT_EXTRA_ARGS
 ' 2>&1 | tee "$EXP_ROOT/logs/run.log"
