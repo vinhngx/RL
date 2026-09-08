@@ -49,7 +49,8 @@ PY
 ' | tee "$ROOT/logs/preflight.log"
 
 docker run --rm --name qwen3-vl-2b-full-rank-vision-natural-from-950 \
-  --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
+  --gpus all --ipc=host --cap-add=SYS_PTRACE \
+  --ulimit memlock=-1 --ulimit stack=67108864 \
   -v "$BREV_ROOT:/brev" -v "$ROOT/ray:/ray" \
   -v "$RUNTIME_REPO:/opt/nemo-rl" -v "$HOST_REPO:/workspace/RL:ro" \
   -e WANDB_API_KEY -e HF_TOKEN -e PYTORCH_ALLOC_CONF=expandable_segments:True \
