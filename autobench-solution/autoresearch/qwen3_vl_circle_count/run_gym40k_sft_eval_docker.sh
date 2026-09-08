@@ -20,10 +20,12 @@ for STEP in 25 50 75 100 125 150 175 200 225 250 275 300; do
   ADAPTER=$ROOT/checkpoints/step_$STEP/policy/weights/model
   [[ -f $ADAPTER/adapter_config.json ]] || continue
   SMOKE=$ROOT/evals/step-$STEP-smoke64.jsonl
-  $PY $SCRIPT/evaluate_hf_lora.py \
-    --data $DATA --model Qwen/Qwen3-VL-2B-Instruct --adapter $ADAPTER \
-    --prompt-file $SCRIPT/prompt_gym_boxed.txt --output $SMOKE \
-    --batch-size 4 --max-new-tokens 128 --temperature 0 --seed 42 --limit 64
+  if [[ ! -f ${SMOKE%.jsonl}.summary.json ]]; then
+    $PY $SCRIPT/evaluate_hf_lora.py \
+      --data $DATA --model Qwen/Qwen3-VL-2B-Instruct --adapter $ADAPTER \
+      --prompt-file $SCRIPT/prompt_gym_boxed.txt --output $SMOKE \
+      --batch-size 4 --max-new-tokens 128 --temperature 0 --seed 42 --limit 64
+  fi
   CORRECT=$(sed -n "s/^  \"correct\": *\([0-9][0-9]*\).*/\1/p" "${SMOKE%.jsonl}.summary.json")
   BOXED=$(sed -n "s/^  \"boxed_parseable\": *\([0-9][0-9]*\).*/\1/p" "${SMOKE%.jsonl}.summary.json")
   echo "step=$STEP smoke_correct=$CORRECT smoke_boxed=$BOXED"
