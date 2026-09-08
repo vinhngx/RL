@@ -22,7 +22,7 @@ FROZEN=/brev/nemo-rl-auto-research/20260904-qwen3-vl-2b-gym6k-reference/eval-gym
 VECTOR=$ROOT/raw-data/validation.jsonl
 SCRIPT=/workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count
 for STEP in 4 8 12 16; do
-  ADAPTER=$ROOT/checkpoints/step_$STEP/policy/weights/model
+  ADAPTER=$ROOT/checkpoints-lr2e5/step_$STEP/policy/weights/model
   [[ -f $ADAPTER/adapter_config.json ]] || continue
   VECTOR_OUT=$ROOT/evals/warmstart-step-$STEP-vector64.jsonl
   CANONICAL_OUT=$ROOT/evals/warmstart-step-$STEP-canonical64.jsonl

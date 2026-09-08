@@ -17,7 +17,7 @@ if [[ -f "$HOST_REPO/.env" ]]; then
   set +a
 fi
 
-mkdir -p "$EXP_ROOT"/{raw-data,sft-data,hf-datasets-cache,logs,checkpoints,ray,tmp,wandb}
+mkdir -p "$EXP_ROOT"/{raw-data,sft-data,hf-datasets-cache,logs,checkpoints-lr2e5,ray,tmp,wandb}
 if [[ ! -f "$EXP_ROOT/raw-data/validation.jsonl" ]]; then
   docker run --rm -v "$BREV_ROOT:/brev" \
     "$IMAGE" bash -lc '
@@ -34,7 +34,7 @@ python3 "$SCRIPT/generate_color_vector_sft.py" \
   --input "$EXP_ROOT/raw-data/validation.jsonl" \
   --output "$EXP_ROOT/sft-data/validation.jsonl"
 
-docker run --rm --name qwen3-vl-2b-color-vector-warmstart --gpus all --ipc=host \
+docker run --rm --name qwen3-vl-2b-color-vector-warmstart-lr2e5 --gpus all --ipc=host \
   --ulimit memlock=-1 --ulimit stack=67108864 \
   -v "$BREV_ROOT:/brev" \
   -v "$EXP_ROOT:/runstate" \
@@ -57,4 +57,4 @@ set -euo pipefail
 cd /opt/nemo-rl
 uv run python examples/run_vlm_sft.py \
   --config examples/configs/recipes/vlm/color_vector_warmstart.yaml
-' 2>&1 | tee "$EXP_ROOT/logs/warmstart.log"
+' 2>&1 | tee "$EXP_ROOT/logs/warmstart-lr2e5.log"

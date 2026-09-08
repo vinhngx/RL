@@ -14,7 +14,7 @@ sft:
 
 checkpointing:
   enabled: true
-  checkpoint_dir: /runstate/checkpoints
+  checkpoint_dir: /runstate/checkpoints-lr2e5
   metric_name: val:val_loss
   higher_is_better: false
   keep_top_k: 5
@@ -62,7 +62,7 @@ policy:
   optimizer:
     name: torch.optim.AdamW
     kwargs:
-      lr: 5.0e-6
+      lr: 2.0e-5
       weight_decay: 0.0
       betas: [0.9, 0.95]
       eps: 1.0e-8
@@ -101,7 +101,7 @@ logger:
   monitor_gpus: true
   wandb:
     project: qwen3-vl-circle-count-autoresearch
-    name: color-vector-warmstart-from-94
+    name: color-vector-warmstart-lr2e5-from-94
 
 cluster:
   gpus_per_node: 1
