@@ -1,0 +1,184 @@
+diff --git a/nemo_rl/models/automodel/train.py b/nemo_rl/models/automodel/train.py
+index d2b597940..cdb150e9b 100644
+--- a/nemo_rl/models/automodel/train.py
++++ b/nemo_rl/models/automodel/train.py
+@@ -501,6 +501,9 @@ class LossPostProcessor:
+         dp_size: int,
+         enable_seq_packing: bool = False,
+         sampling_params: Optional[TrainingSamplingParams] = None,
++        counterfactual_vision_state: Optional[dict[str, torch.Tensor]] = None,
++        count_direction_weights: Optional[torch.Tensor] = None,
++        counterfactual_vision_aux_config: Optional[dict[str, Any]] = None,
+     ):
+         """Initialize LossPostProcessor.
+ 
+@@ -524,6 +527,11 @@ class LossPostProcessor:
+         self.dp_size = dp_size
+         self.enable_seq_packing = enable_seq_packing
+         self.sampling_params = sampling_params
++        self.counterfactual_vision_state = counterfactual_vision_state
++        self.count_direction_weights = count_direction_weights
++        self.counterfactual_vision_aux_config = (
++            counterfactual_vision_aux_config or {}
++        )
+ 
+     def __call__(
+         self,
+@@ -585,9 +593,93 @@ class LossPostProcessor:
+                 **loss_input,
+             )
+ 
++        if self.counterfactual_vision_aux_config.get("enabled"):
++            if self.counterfactual_vision_state is None:
++                raise RuntimeError("counterfactual vision state was not configured")
++            pooled = self.counterfactual_vision_state.pop("pooled", None)
++            if pooled is None or self.count_direction_weights is None:
++                raise RuntimeError("counterfactual vision hook did not capture features")
++            aux_loss, aux_metrics = counterfactual_vision_direction_loss(
++                pooled=pooled,
++                input_ids=data_dict["input_ids"],
++                token_mask=data_dict["token_mask"],
++                sample_mask=data_dict["sample_mask"],
++                count_direction_weights=self.count_direction_weights,
++                global_valid_seqs=global_valid_seqs,
++                margin=float(self.counterfactual_vision_aux_config["margin"]),
++                temperature=float(
++                    self.counterfactual_vision_aux_config["temperature"]
++                ),
++            )
++            weight = float(self.counterfactual_vision_aux_config["weight"])
++            loss = loss + weight * aux_loss
++            loss_metrics.update(aux_metrics)
++            loss_metrics["counterfactual_vision_weighted_loss"] = (
++                weight * aux_loss
++            ).item()
++
+         return loss, loss_metrics
+ 
+ 
++def counterfactual_vision_direction_loss(
++    *,
++    pooled: torch.Tensor,
++    input_ids: torch.Tensor,
++    token_mask: torch.Tensor,
++    sample_mask: torch.Tensor,
++    count_direction_weights: torch.Tensor,
++    global_valid_seqs: torch.Tensor,
++    margin: float,
++    temperature: float,
++) -> tuple[torch.Tensor, dict[str, float]]:
++    """Align each +1 image delta with its frozen decoder digit direction."""
++    if pooled.shape[0] % 4 != 0:
++        raise ValueError("counterfactual vision batches must contain groups of 4")
++    if temperature <= 0:
++        raise ValueError("counterfactual vision temperature must be positive")
++    group_losses = []
++    group_cosines = []
++    group_masks = []
++    for start in range(0, pooled.shape[0], 4):
++        digit_ids = []
++        for row in (start, start + 2):
++            selected = input_ids[row][
++                token_mask[row].bool()
++                & (input_ids[row] >= 15)
++                & (input_ids[row] <= 24)
++            ]
++            if selected.numel() == 0:
++                raise ValueError("chosen response has no digit token")
++            digit_ids.append(selected[0])
++        lower = (pooled[start] + pooled[start + 1]) / 2
++        upper = (pooled[start + 2] + pooled[start + 3]) / 2
++        visual_delta = upper - lower
++        count_direction = (
++            count_direction_weights[digit_ids[1]]
++            - count_direction_weights[digit_ids[0]]
++        ).detach()
++        cosine = torch.nn.functional.cosine_similarity(
++            visual_delta.float(), count_direction.float(), dim=0
++        )
++        group_cosines.append(cosine)
++        group_losses.append(
++            torch.nn.functional.softplus((margin - cosine) / temperature)
++        )
++        group_masks.append(sample_mask[start : start + 4].min())
++    losses = torch.stack(group_losses)
++    cosines = torch.stack(group_cosines)
++    masks = torch.stack(group_masks)
++    global_groups = (global_valid_seqs / 4).clamp(min=1)
++    aux_loss = (losses * masks).sum() / global_groups
++    return aux_loss, {
++        "counterfactual_vision_loss": aux_loss.item(),
++        "counterfactual_vision_cosine": ((cosines * masks).sum() / global_groups).item(),
++        "counterfactual_vision_positive": (
++            ((cosines > 0).float() * masks).sum() / global_groups
++        ).item(),
++    }
++
++
+ class LogprobsPostProcessor:
+     """Post-processor for computing log probabilities from model outputs."""
+ 
+diff --git a/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py b/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
+index 2fa8a8e60..f007e5452 100644
+--- a/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
++++ b/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
+@@ -358,6 +358,39 @@ class DTensorPolicyWorkerV2Impl(AbstractPolicyWorker, ColocatablePolicyInterface
+             # Ensure model is in training mode
+             self.model.train()
+ 
++        vision_aux_config = self.cfg["dtensor_cfg"].get(
++            "counterfactual_vision_aux", {}
++        )
++        vision_state = None
++        count_direction_weights = None
++        vision_hook = None
++        if vision_aux_config.get("enabled"):
++            vision_state = {}
++            merge_size = int(vision_aux_config["merge_size"])
++
++            def capture_counterfactual_vision(
++                _module, inputs, kwargs, output
++            ) -> None:
++                grid_thw = kwargs.get("grid_thw")
++                if grid_thw is None and len(inputs) > 1:
++                    grid_thw = inputs[1]
++                if grid_thw is None:
++                    raise RuntimeError("vision hook did not receive grid_thw")
++                sizes = (
++                    grid_thw.prod(-1) // (merge_size * merge_size)
++                ).tolist()
++                vision_state["pooled"] = torch.stack(
++                    [
++                        chunk.float().mean(0)
++                        for chunk in output.pooler_output.split(sizes)
++                    ]
++                )
++
++            vision_hook = self.model.model.visual.register_forward_hook(
++                capture_counterfactual_vision, with_kwargs=True
++            )
++            count_direction_weights = self.model.lm_head.weight
++
+         # Create loss post-processor
+         loss_post_processor = LossPostProcessor(
+             loss_fn=loss_fn,
+@@ -369,6 +402,9 @@ class DTensorPolicyWorkerV2Impl(AbstractPolicyWorker, ColocatablePolicyInterface
+             dp_size=self.dp_size,
+             enable_seq_packing=self.enable_seq_packing,
+             sampling_params=self.sampling_params,
++            counterfactual_vision_state=vision_state,
++            count_direction_weights=count_direction_weights,
++            counterfactual_vision_aux_config=vision_aux_config,
+         )
+ 
+         # Create train context factory
+@@ -487,6 +523,9 @@ class DTensorPolicyWorkerV2Impl(AbstractPolicyWorker, ColocatablePolicyInterface
+ 
+                 losses.append(torch.tensor(mb_losses).sum().item())
+ 
++            if vision_hook is not None:
++                vision_hook.remove()
++
+             # release gradient memory before rollouts
+             self.optimizer.zero_grad()
+             # increment scheduler after all batches in rollout are processed

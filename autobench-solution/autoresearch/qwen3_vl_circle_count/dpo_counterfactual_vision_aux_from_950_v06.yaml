@@ -1,0 +1,69 @@
+# DPO plus a paired-image auxiliary that aligns a +1 visual delta with the
+# frozen decoder's adjacent-count direction. The auxiliary is training-only.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/dpo_system_matched_vision_only_from_945_v06.yaml
+
+dpo:
+  max_num_epochs: 1
+  max_num_steps: 8
+  val_period: 1
+  val_batches: 3
+  val_global_batch_size: 16
+  val_micro_batch_size: 2
+  val_at_start: true
+  val_at_end: true
+  reference_policy_kl_penalty: 0.1
+  preference_loss_weight: 1.0
+  sft_loss_weight: 0.0
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-vision-aux-dpo-from-950/checkpoints
+  save_period: 1
+  keep_top_k: 8
+
+policy:
+  model_name: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-pair-grpo/merged-step2
+  tokenizer:
+    name: ${policy.model_name}
+  train_global_batch_size: 16
+  train_micro_batch_size: 2
+  dtensor_cfg:
+    activation_checkpointing: false
+    counterfactual_vision_aux:
+      enabled: true
+      merge_size: 2
+      margin: 0.02
+      temperature: 0.01
+      weight: 0.02
+    lora_cfg:
+      enabled: true
+      target_modules:
+        - "*visual*attn.qkv"
+        - "*visual*attn.proj"
+        - "*visual*linear_fc1"
+        - "*visual*linear_fc2"
+      exclude_modules: []
+      match_all_linear: false
+      dim: 8
+      alpha: 16
+      dropout: 0.0
+      dropout_position: post
+      lora_A_init: xavier
+      use_triton: true
+  optimizer:
+    kwargs:
+      lr: 2.5e-7
+
+data:
+  shuffle: false
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-vision-aux-dpo-from-950/data/train.jsonl
+  validation:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-vision-aux-dpo-from-950/data/validation.jsonl
+  default:
+    prompt_file: null
+    system_prompt_file: null
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-vision-aux-dpo-from-950/logs
+  wandb:
+    name: counterfactual-vision-aux-dpo-from-950
