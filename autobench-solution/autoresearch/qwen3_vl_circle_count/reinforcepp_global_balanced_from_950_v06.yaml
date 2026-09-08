@@ -1,0 +1,17 @@
+# Global-advantage RL on a fresh deployment-matched 5--10-count pool.
+# The pool is 87.6% correct under the parent, providing more corrective mass
+# than the dense counterfactual probe without training on failures alone.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/reinforcepp_global_counterfactual_from_950_v06.yaml
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/reinforcepp-global-balanced-from-950/checkpoints
+
+data:
+  shuffle: true
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/fresh-hard-negatives-from-950/data/candidate-pool.jsonl
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/reinforcepp-global-balanced-from-950/logs
+  wandb:
+    name: reinforcepp-global-balanced-from-950
