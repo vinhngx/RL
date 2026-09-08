@@ -41,6 +41,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Emit only actual failure preferences, without direction counter-anchors.",
     )
+    parser.add_argument(
+        "--terse-completions",
+        action="store_true",
+        help="Use boxed-only chosen/rejected responses instead of model prose.",
+    )
     return parser.parse_args()
 
 
@@ -195,6 +200,8 @@ def main() -> None:
         used_anchors.add(anchor_index)
 
         actual_response = prediction["response"]
+        if args.terse_completions:
+            actual_response = rf"\boxed{{{predicted}}}"
         failure_pair = preference(
             row,
             replace_box(actual_response, count),
@@ -203,8 +210,10 @@ def main() -> None:
         )
 
         anchor_row = rows[anchor_index]
-        anchor_response = predictions[anchor_index]["response"]
         anchor_count = expected[anchor_index]
+        anchor_response = predictions[anchor_index]["response"]
+        if args.terse_completions:
+            anchor_response = rf"\boxed{{{anchor_count}}}"
         rejected_count = (
             anchor_count + 1
             if anchor_reject_direction == "up"
@@ -246,6 +255,7 @@ def main() -> None:
                 "failures": len(failures),
                 "match_quality": match_counts,
                 "omit_anchors": args.omit_anchors,
+                "terse_completions": args.terse_completions,
                 "train": len(outputs["train"]),
                 "unique_anchors": len(used_anchors),
                 "validation": len(outputs["validation"]),

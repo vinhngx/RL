@@ -1,0 +1,92 @@
+diff --git a/nemo_rl/algorithms/loss/loss_functions.py b/nemo_rl/algorithms/loss/loss_functions.py
+index df6ff6bc5..49c6e5b71 100755
+--- a/nemo_rl/algorithms/loss/loss_functions.py
++++ b/nemo_rl/algorithms/loss/loss_functions.py
+@@ -783,6 +783,8 @@ class DPOLossConfig(TypedDict):
+     sft_loss_weight: float
+     preference_average_log_probs: bool
+     sft_average_log_probs: bool
++    preference_algorithm: NotRequired[str]
++    simpo_gamma: NotRequired[float]
+ 
+ 
+ class DPOLossDataDict(TypedDict):
+@@ -859,6 +861,14 @@ class DPOLossFn(PreferenceLossFn):
+         self.sft_loss_weight = cfg["sft_loss_weight"]
+         self.preference_average_log_probs = cfg["preference_average_log_probs"]
+         self.sft_average_log_probs = cfg["sft_average_log_probs"]
++        self.preference_algorithm = cfg.get("preference_algorithm", "dpo")
++        self.simpo_gamma = cfg.get("simpo_gamma", 0.0)
++        if self.preference_algorithm not in {"dpo", "simpo"}:
++            raise ValueError(
++                "preference_algorithm must be either 'dpo' or 'simpo'"
++            )
++        if self.simpo_gamma < 0:
++            raise ValueError("simpo_gamma must be non-negative")
+         self.use_linear_ce_fusion = use_linear_ce_fusion
+         self.sft_loss = NLLLossFn(use_linear_ce_fusion=use_linear_ce_fusion)
+ 
+@@ -883,6 +893,50 @@ class DPOLossFn(PreferenceLossFn):
+             rewards, sample_mask, global_valid_seqs, self.reference_policy_kl_penalty
+         )
+ 
++    def _simpo_loss(
++        self,
++        next_token_logprobs: Tensor,
++        data: BatchedDataDict[DPOLossDataDict],
++        global_valid_seqs: Tensor,
++    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
++        """Compute reference-free SimPO over length-normalized responses."""
++        token_mask = data["token_mask"][:, 1:]
++        sample_mask = data["sample_mask"]
++        rewards = (next_token_logprobs * token_mask).sum(-1)
++        rewards = rewards / token_mask.sum(-1).clamp(min=1)
++        rewards_chosen, rewards_rejected = self.split_output_tensor(rewards)
++        rewards_delta = rewards_chosen - rewards_rejected
++        per_sample_loss = (
++            -torch.nn.functional.logsigmoid(
++                self.reference_policy_kl_penalty * rewards_delta
++                - self.simpo_gamma
++            )
++            * sample_mask[::2]
++        )
++        normalization = global_valid_seqs / 2
++        return (
++            masked_mean(
++                per_sample_loss,
++                sample_mask[::2],
++                global_normalization_factor=normalization,
++            ),
++            masked_mean(
++                rewards_chosen > rewards_rejected,
++                sample_mask[::2],
++                global_normalization_factor=normalization,
++            ),
++            masked_mean(
++                rewards_chosen,
++                sample_mask[::2],
++                global_normalization_factor=normalization,
++            ),
++            masked_mean(
++                rewards_rejected,
++                sample_mask[1::2],
++                global_normalization_factor=normalization,
++            ),
++        )
++
+     # TODO a cleaner typing fix would be required (probably that DPOLossFn should not inherit from PreferenceLossFn)
+     def __call__(  # type: ignore
+         self,
+@@ -916,7 +970,11 @@ class DPOLossFn(PreferenceLossFn):
+             accuracy,
+             rewards_chosen_mean,
+             rewards_rejected_mean,
+-        ) = self._dpo_loss(next_token_logprobs, data, global_valid_seqs)
++        ) = (
++            self._simpo_loss(next_token_logprobs, data, global_valid_seqs)
++            if self.preference_algorithm == "simpo"
++            else self._dpo_loss(next_token_logprobs, data, global_valid_seqs)
++        )
+ 
+         dpo_loss = (
+             self.sft_loss_weight * sft_loss_chosen

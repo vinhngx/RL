@@ -1,0 +1,49 @@
+# Reference-free target-margin preference optimization from the 190/200 leader.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/dpo_system_matched_vision_only_from_945_v06.yaml
+
+dpo:
+  max_num_epochs: 1
+  max_num_steps: 8
+  val_period: 1
+  val_batches: 1
+  val_global_batch_size: 32
+  val_micro_batch_size: 1
+  val_at_start: true
+  val_at_end: true
+  preference_algorithm: simpo
+  # SimPO uses beta=2 and gamma/beta=0.5 as its recommended starting point.
+  reference_policy_kl_penalty: 2.0
+  simpo_gamma: 1.0
+  preference_loss_weight: 1.0
+  sft_loss_weight: 0.0
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/vision-simpo-margin-from-950/checkpoints
+  save_period: 1
+  keep_top_k: 8
+
+policy:
+  model_name: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-pair-grpo/merged-step2
+  tokenizer:
+    name: ${policy.model_name}
+  train_global_batch_size: 32
+  train_micro_batch_size: 1
+  optimizer:
+    kwargs:
+      lr: 5.0e-7
+
+data:
+  shuffle: true
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/vision-simpo-margin-from-950/data/train.jsonl
+  validation:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/vision-simpo-margin-from-950/data/validation.jsonl
+  default:
+    prompt_file: null
+    system_prompt_file: null
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/vision-simpo-margin-from-950/logs
+  wandb:
+    name: vision-simpo-margin-from-950
+
