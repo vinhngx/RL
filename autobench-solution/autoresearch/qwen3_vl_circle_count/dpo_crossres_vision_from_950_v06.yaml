@@ -1,0 +1,36 @@
+# Train native-resolution vision preferences only on fresh failures that the
+# same parent solves under a complementary 655,360-pixel processor view.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/dpo_system_matched_vision_only_from_945_v06.yaml
+
+dpo:
+  max_num_steps: 4
+  val_period: 1
+  val_batches: 1
+  val_at_start: false
+  val_at_end: true
+  sft_loss_weight: 0.0
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/crossres-vision-dpo-from-950/checkpoints
+  save_period: 1
+  keep_top_k: 4
+
+policy:
+  model_name: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-pair-grpo/merged-step2
+  tokenizer:
+    name: ${policy.model_name}
+  optimizer:
+    kwargs:
+      lr: 5.0e-7
+
+data:
+  shuffle: true
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/crossres-vision-dpo-from-950/data/train.jsonl
+  validation:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/crossres-vision-dpo-from-950/data/validation.jsonl
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/crossres-vision-dpo-from-950/logs
+  wandb:
+    name: crossres-vision-dpo-from-950

@@ -24,6 +24,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--predictions", type=Path, required=True)
+    parser.add_argument(
+        "--teacher-predictions",
+        type=Path,
+        help=(
+            "If set, retain only student failures for which the teacher's "
+            "boxed prediction is correct."
+        ),
+    )
     parser.add_argument("--train-output", type=Path, required=True)
     parser.add_argument("--validation-output", type=Path, required=True)
     parser.add_argument("--validation-every", type=int, default=16)
@@ -111,6 +119,13 @@ def main() -> None:
     predictions = [json.loads(line) for line in args.predictions.open()]
     if len(rows) != len(predictions):
         raise ValueError("data and prediction lengths differ")
+    teacher_predictions = None
+    if args.teacher_predictions is not None:
+        teacher_predictions = [
+            json.loads(line) for line in args.teacher_predictions.open()
+        ]
+        if len(rows) != len(teacher_predictions):
+            raise ValueError("data and teacher prediction lengths differ")
 
     failures: list[int] = []
     correct: list[int] = []
@@ -121,7 +136,12 @@ def main() -> None:
         predicted = prediction.get("boxed_predicted_count")
         if predicted is None:
             raise ValueError(f"prediction {index} has no boxed answer")
-        (correct if predicted == count else failures).append(index)
+        if predicted == count:
+            correct.append(index)
+        elif teacher_predictions is None:
+            failures.append(index)
+        elif teacher_predictions[index].get("boxed_predicted_count") == count:
+            failures.append(index)
 
     # Anchors for an undercount reject count+1; anchors for an overcount reject
     # count-1.  Bucket them from most-specific to fallback matching levels.
@@ -212,6 +232,9 @@ def main() -> None:
         json.dumps(
             {
                 "correct_pool": len(correct),
+                "teacher_rescued_failures": (
+                    len(failures) if teacher_predictions is not None else None
+                ),
                 "failure_directions": failure_directions,
                 "failures": len(failures),
                 "match_quality": match_counts,
