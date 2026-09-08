@@ -14,7 +14,7 @@ docker run --rm --gpus all --ipc=host \
 set -euo pipefail
 PY=/opt/ray_venvs/nemo_rl.models.policy.workers.megatron_policy_worker.MegatronPolicyWorker/bin/python
 CAMPAIGN=/brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98
-ROOT=$CAMPAIGN/pair-consistency-grpo
+ROOT=$CAMPAIGN/pair-consistency-grpo-v2
 DATA=/brev/nemo-rl-auto-research/20260904-qwen3-vl-2b-gym6k-reference/eval-gym-profile-200/profile-seed10000.jsonl
 SCRIPT=/workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count
 $PY $SCRIPT/evaluate_hf_lora.py \
