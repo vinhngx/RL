@@ -1,0 +1,198 @@
+--- a/nemo_rl/algorithms/grpo.py
++++ b/nemo_rl/algorithms/grpo.py
+@@ -12,6 +12,7 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ import gc
++import math
+ import os
+ import re
+ import time
+@@ -58,6 +59,7 @@
+     batched_message_log_to_flat_message,
+     get_keys_from_message_log,
+ )
++from nemo_rl.data.multimodal_utils import PackedTensor
+ from nemo_rl.data.utils import extract_necessary_env_names
+ from nemo_rl.distributed.batched_data_dict import BatchedDataDict
+ from nemo_rl.distributed.ray_actor_environment_registry import get_actor_python_env
+@@ -141,6 +143,17 @@
+     expected_delta: NotRequired[int]
+ 
+ 
++class VPPOPerceptionConfig(TypedDict):
++    """Image-perturbation token selection from the VPPO algorithm."""
++
++    enabled: bool
++    top_p: NotRequired[float]
++    black_probability: NotRequired[float]
++    seed: NotRequired[int]
++    advantage_shaping: NotRequired[bool]
++    advantage_scaling_min: NotRequired[float]
++
++
+ class GRPOConfig(TypedDict):
+     num_prompts_per_step: int
+     num_generations_per_prompt: int
+@@ -182,6 +195,7 @@
+     # Optional generated-token IDs that receive policy-gradient credit. When
+     # omitted, standard GRPO trains every generated assistant token.
+     perception_token_ids: NotRequired[list[int]]
++    vppo_perception: NotRequired[VPPOPerceptionConfig]
+ 
+ 
+ def _set_grpo_token_loss_mask(
+@@ -205,6 +219,89 @@
+         )
+ 
+ 
++def _make_vppo_augmented_multimodal_data(
++    multimodal_data: dict[str, Any], black_probability: float, seed: int
++) -> dict[str, Any]:
++    """Zero random Qwen vision-patch rows for VPPO sensitivity scoring."""
++    if not 0.0 < black_probability < 1.0:
++        raise ValueError("vppo black_probability must be in (0, 1)")
++    augmented = {}
++    for key, value in multimodal_data.items():
++        if key != "pixel_values":
++            augmented[key] = value
++            continue
++        if not isinstance(value, PackedTensor):
++            raise TypeError("vppo expects pixel_values to be a PackedTensor")
++        tensors = []
++        for index, tensor in enumerate(value.tensors):
++            if tensor is None:
++                tensors.append(None)
++                continue
++            masked = tensor.clone()
++            generator = torch.Generator(device=masked.device)
++            generator.manual_seed(seed + index)
++            patch_count = masked.shape[value.dim_to_pack]
++            patch_mask = torch.rand(
++                patch_count, generator=generator, device=masked.device
++            ) < black_probability
++            view_shape = [1] * masked.ndim
++            view_shape[value.dim_to_pack] = patch_count
++            masked.masked_fill_(patch_mask.view(view_shape), 0)
++            tensors.append(masked)
++        augmented[key] = PackedTensor(tensors, value.dim_to_pack)
++    if "pixel_values" not in augmented:
++        raise ValueError("vppo requires image pixel_values")
++    return augmented
++
++
++def _apply_vppo_perception_credit(
++    train_data: BatchedDataDict[ClippedPGLossDataDict],
++    augmented_logprobs: torch.Tensor,
++    config: VPPOPerceptionConfig,
++) -> dict[str, float]:
++    """Select visually sensitive response tokens and optionally shape advantage."""
++    top_p = float(config.get("top_p", 0.2))
++    if not 0.0 < top_p <= 1.0:
++        raise ValueError("vppo top_p must be in (0, 1]")
++
++    response_mask = train_data["token_mask"].bool()
++    original_logprobs = train_data["prev_logprobs"]
++    logprob_difference = (augmented_logprobs - original_logprobs).clamp(-20, 20)
++    perception = (logprob_difference.exp() - logprob_difference - 1).clamp(0, 10)
++    selected = torch.zeros_like(response_mask)
++    for row in range(response_mask.shape[0]):
++        valid_indices = response_mask[row].nonzero(as_tuple=False).flatten()
++        if valid_indices.numel() == 0:
++            continue
++        keep = max(1, math.ceil(valid_indices.numel() * top_p))
++        scores = perception[row, valid_indices]
++        chosen = valid_indices[torch.topk(scores, k=keep).indices]
++        selected[row, chosen] = True
++    train_data["token_mask"] = selected.to(train_data["token_mask"].dtype)
++
++    valid_counts = response_mask.sum(dim=1).clamp(min=1)
++    sensitivity = (perception * response_mask).sum(dim=1) / valid_counts
++    if config.get("advantage_shaping", True) and sensitivity.numel() > 1:
++        score_min = sensitivity.min()
++        score_max = sensitivity.max()
++        if (score_max - score_min).item() > 1e-8:
++            normalized = (sensitivity - score_min) / (score_max - score_min)
++            scaling_min = float(config.get("advantage_scaling_min", 0.8))
++            mean_normalized = normalized.mean().clamp(min=1e-8)
++            scaling_max = scaling_min + (1.0 - scaling_min) / mean_normalized
++            scaling = scaling_min + normalized * (scaling_max - scaling_min)
++            train_data["advantages"] *= scaling.unsqueeze(1)
++
++    selected_scores = perception[selected]
++    rejected_scores = perception[response_mask & ~selected]
++    return {
++        "vppo/selected_token_fraction": float(selected.sum() / response_mask.sum()),
++        "vppo/perception_selected_mean": float(selected_scores.mean()),
++        "vppo/perception_rejected_mean": float(rejected_scores.mean()),
++        "vppo/trajectory_sensitivity_mean": float(sensitivity.mean()),
++    }
++
++
+ class GRPOSaveState(TypedDict):
+     consumed_samples: int
+     current_step: int
+@@ -1879,10 +1976,41 @@
+                             **extra_multimodal_data,
+                         }
+                     )
++                    vppo_config = master_config["grpo"].get("vppo_perception", {})
++                    augmented_multimodal_data = None
++                    if vppo_config.get("enabled", False):
++                        augmented_multimodal_data = (
++                            _make_vppo_augmented_multimodal_data(
++                                extra_multimodal_data,
++                                black_probability=float(
++                                    vppo_config.get("black_probability", 0.5)
++                                ),
++                                seed=int(vppo_config.get("seed", 42)) + total_steps,
++                            )
++                        )
+                     train_data["prev_logprobs"] = policy.get_logprobs(
+                         logprob_data, timer=timer
+                     )["logprobs"]
+ 
++                    augmented_logprobs = None
++                    if augmented_multimodal_data is not None:
++                        augmented_logprob_data = BatchedDataDict[
++                            ClippedPGLossDataDict
++                        ](
++                            {
++                                "input_ids": train_data["input_ids"],
++                                "input_lengths": train_data["input_lengths"],
++                                "token_mask": flat_messages["token_loss_mask"],
++                                "sample_mask": repeated_batch["loss_multiplier"],
++                                **augmented_multimodal_data,
++                            }
++                        )
++                        augmented_logprobs = policy.get_logprobs(
++                            augmented_logprob_data, timer=timer
++                        )["logprobs"]
++                        del augmented_logprob_data
++                        del augmented_multimodal_data
++
+                     if not master_config["grpo"].get(
+                         "skip_reference_policy_logprobs_calculation"
+                     ):
+@@ -1924,6 +2052,21 @@
+                         logprobs_policy=train_data["prev_logprobs"],
+                         logprobs_reference=train_data.get("reference_policy_logprobs"),
+                     )
++                    if augmented_logprobs is not None:
++                        vppo_metrics = _apply_vppo_perception_credit(
++                            train_data,
++                            augmented_logprobs,
++                            vppo_config,
++                        )
++                        metrics.update(vppo_metrics)
++                        print(
++                            "  🔭 VPPO: "
++                            f"selected={vppo_metrics['vppo/selected_token_fraction']:.3f}, "
++                            f"selected_kl={vppo_metrics['vppo/perception_selected_mean']:.6f}, "
++                            f"rejected_kl={vppo_metrics['vppo/perception_rejected_mean']:.6f}",
++                            flush=True,
++                        )
++                        del augmented_logprobs
+                     del prompt_ids_for_adv
+ 
+                     # Log rewards and advantages information

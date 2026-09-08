@@ -1,0 +1,31 @@
+# Faithful VPPO continuation from the robust 190/200 leader. Token credit is
+# derived from image-perturbation sensitivity, rather than a fixed digit proxy.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/grpo_fresh_paired_counterfactual_from_950_v06.yaml
+
+grpo:
+  perception_token_ids: null
+  vppo_perception:
+    enabled: true
+    top_p: 0.20
+    black_probability: 0.50
+    seed: 919
+    advantage_shaping: true
+    advantage_scaling_min: 0.80
+  max_num_steps: 4
+  val_period: 1
+  seed: 919
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/true-vppo-from-950/checkpoints
+  save_period: 1
+  keep_top_k: 4
+
+policy:
+  optimizer:
+    kwargs:
+      lr: 2.5e-7
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/true-vppo-from-950/logs
+  wandb:
+    name: true-vppo-from-950
