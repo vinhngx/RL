@@ -29,7 +29,7 @@ policy:
     chat_template_kwargs:
       enable_thinking: false
   train_global_batch_size: 128
-  train_micro_batch_size: 16
+  train_micro_batch_size: 8
   max_total_sequence_length: 2048
   precision: bfloat16
   make_sequence_length_divisible_by: 1
