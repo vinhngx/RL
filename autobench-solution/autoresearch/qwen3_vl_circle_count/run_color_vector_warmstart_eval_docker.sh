@@ -28,7 +28,7 @@ for STEP in 4 8 12 16; do
   CANONICAL_OUT=$ROOT/evals/warmstart-step-$STEP-canonical64.jsonl
   $PY $SCRIPT/evaluate_hf_lora.py \
     --data $VECTOR --model $BASE --adapter $ADAPTER \
-    --prompt-file $SCRIPT/prompt_color_vector.txt --output $VECTOR_OUT \
+    --prompt-file $SCRIPT/prompt_color_vector_system.txt --output $VECTOR_OUT \
     --batch-size 4 --max-new-tokens 192 --temperature 1.0 --seed 42 --limit 64
   $PY $SCRIPT/analyze_color_vector_eval.py \
     --data $VECTOR --predictions $VECTOR_OUT \
