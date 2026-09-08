@@ -1,0 +1,21 @@
+# Exact-token SimPO on actual leader failures only. Removing the paired
+# counter-anchors tests whether their opposite-direction signal caused the
+# systematic undercount regressions in experiments 55 and 56.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/dpo_boxed_token_simpo_from_950_v06.yaml
+
+dpo:
+  max_num_steps: 8
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/failure-only-boxed-token-simpo-from-950/checkpoints
+
+data:
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/failure-only-boxed-token-simpo-from-950/data/train.jsonl
+  validation:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/failure-only-boxed-token-simpo-from-950/data/validation.jsonl
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/failure-only-boxed-token-simpo-from-950/logs
+  wandb:
+    name: failure-only-boxed-token-simpo-from-950
