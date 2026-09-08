@@ -16,7 +16,7 @@ PY=/opt/ray_venvs/nemo_rl.models.policy.workers.megatron_policy_worker.MegatronP
 ROOT=/brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/gym40k-sft-original-2b
 DATA=/brev/nemo-rl-auto-research/20260904-qwen3-vl-2b-gym6k-reference/eval-gym-profile-200/profile-seed10000.jsonl
 SCRIPT=/workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count
-for STEP in 75 100 125 150 175 200 225 250 275 300; do
+for STEP in 25 50 75 100 125 150 175 200 225 250 275 300; do
   ADAPTER=$ROOT/checkpoints/step_$STEP/policy/weights/model
   [[ -f $ADAPTER/adapter_config.json ]] || continue
   SMOKE=$ROOT/evals/step-$STEP-smoke64.jsonl
