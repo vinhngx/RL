@@ -27,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-output", type=Path, required=True)
     parser.add_argument("--validation-output", type=Path, required=True)
     parser.add_argument("--validation-every", type=int, default=16)
+    parser.add_argument("--system-prompt-file", type=Path)
     return parser.parse_args()
 
 
@@ -57,13 +58,15 @@ def expected_count(row: dict[str, Any]) -> int:
 
 
 def preference(
-    row: dict[str, Any], chosen: str, rejected: str
+    row: dict[str, Any], chosen: str, rejected: str, system_prompt: str | None
 ) -> dict[str, Any]:
     if chosen == rejected:
         raise ValueError("chosen and rejected completions are identical")
     image, question = media_and_question(row)
-    return {
-        "context": [
+    context: list[dict[str, Any]] = []
+    if system_prompt is not None:
+        context.append({"role": "system", "content": system_prompt})
+    context.append(
             {
                 "role": "user",
                 "content": [
@@ -71,7 +74,9 @@ def preference(
                     {"type": "text", "text": question},
                 ],
             }
-        ],
+    )
+    return {
+        "context": context,
         "completions": [
             {"rank": 0, "completion": [{"role": "assistant", "content": chosen}]},
             {
@@ -96,6 +101,11 @@ def main() -> None:
     args = parse_args()
     if args.validation_every < 2:
         raise ValueError("--validation-every must be at least 2")
+    system_prompt = None
+    if args.system_prompt_file is not None:
+        system_prompt = args.system_prompt_file.read_text().strip()
+        if not system_prompt:
+            raise ValueError("--system-prompt-file is empty")
 
     rows = [json.loads(line) for line in args.data.open()]
     predictions = [json.loads(line) for line in args.predictions.open()]
@@ -164,6 +174,7 @@ def main() -> None:
             row,
             replace_box(actual_response, count),
             actual_response,
+            system_prompt,
         )
 
         anchor_row = rows[anchor_index]
@@ -178,6 +189,7 @@ def main() -> None:
             anchor_row,
             anchor_response,
             replace_box(anchor_response, rejected_count),
+            system_prompt,
         )
 
         split = (

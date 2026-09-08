@@ -1,0 +1,40 @@
+# Direction-neutral DPO with an explicit deployment-matched system turn.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/dpo_vlm_replay_from_93_v06.yaml
+
+dpo:
+  max_num_steps: 8
+  val_period: 2
+  val_batches: 1
+  val_at_start: false
+  val_at_end: true
+  sft_loss_weight: 0.0
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/system-matched-direction-dpo/checkpoints
+  save_period: 2
+  keep_top_k: 4
+
+policy:
+  model_name: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/matched-prompt-model-mined-grpo/merged-parent
+  tokenizer:
+    name: ${policy.model_name}
+    chat_template: default
+    chat_template_kwargs:
+      enable_thinking: false
+  optimizer:
+    kwargs:
+      lr: 1.0e-6
+
+data:
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/system-matched-direction-dpo/data/train.jsonl
+  validation:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/system-matched-direction-dpo/data/validation.jsonl
+  default:
+    prompt_file: null
+    system_prompt_file: null
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/system-matched-direction-dpo/logs
+  wandb:
+    name: system-matched-direction-dpo-from-945
