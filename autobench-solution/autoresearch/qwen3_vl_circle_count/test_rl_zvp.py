@@ -4,6 +4,7 @@ from nemo_rl.algorithms.advantage_estimator import RLZVPAdvantageEstimator
 from nemo_rl.algorithms.grpo import _dataset_prompt_group_ids
 from nemo_rl.algorithms.utils import calculate_baseline_and_std_per_prompt
 from nemo_rl.distributed.batched_data_dict import BatchedDataDict
+from nemo_rl.environments.rewards import boxed_numeric_proximity_reward
 
 
 def test_rl_zvp_mixed_and_zero_variance_groups():
@@ -67,8 +68,28 @@ def test_dynamic_sampling_uses_full_group_variance():
     assert torch.count_nonzero(loo_std).item() == 7
 
 
+def test_boxed_numeric_proximity_is_distance_sensitive():
+    assert boxed_numeric_proximity_reward("7", r"\\boxed{7}", decay=0.5) == (
+        1.0,
+        True,
+    )
+    assert boxed_numeric_proximity_reward("7", r"\\boxed{6}", decay=0.5) == (
+        0.5,
+        False,
+    )
+    assert boxed_numeric_proximity_reward("7", r"\\boxed{9}", decay=0.5) == (
+        0.25,
+        False,
+    )
+    assert boxed_numeric_proximity_reward("7", "answer: 7", decay=0.5) == (
+        0.0,
+        False,
+    )
+
+
 if __name__ == "__main__":
     test_rl_zvp_mixed_and_zero_variance_groups()
     test_vlm_group_identity_keeps_distinct_images_separate()
     test_dynamic_sampling_uses_full_group_variance()
+    test_boxed_numeric_proximity_is_distance_sensitive()
     print("RL-ZVP advantage test passed")

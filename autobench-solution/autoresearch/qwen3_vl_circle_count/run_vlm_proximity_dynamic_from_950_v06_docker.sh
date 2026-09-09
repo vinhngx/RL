@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT=/home/ubuntu/RL/autobench-solution/autoresearch/qwen3_vl_circle_count
+export VLM_GROUP_IDENTITY=1
+export EXP_NAME=vlm-proximity-dynamic-grpo-from-950
+export CONFIG_FILE=grpo_vlm_proximity_dynamic_from_950_v06.yaml
+export CONTAINER_NAME=qwen3-vl-2b-proximity-dynamic-grpo
+exec bash "$SCRIPT/run_rl_zvp_from_950_v06_docker.sh"
