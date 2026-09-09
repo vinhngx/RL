@@ -150,3 +150,13 @@ The 200-example set was used repeatedly for model selection, so 95% is a
 development result rather than an unbiased final estimate. The blind final was
 intentionally kept sealed because the predeclared 197/200 promotion threshold
 was never met. No secret values are included in this report.
+
+## Post-report fresh final evaluation
+
+After this campaign report was closed, the user requested a new 1,000-example
+final comparison across all promoted milestones. On frozen seeds
+30,000,000--30,000,999, counterfactual-pair GRPO and its edge-GRPO parent tied
+at **950/1000 (95.0%)**, with 1000/1000 boxed answers. Full methodology,
+checkpoint ranking, paired statistics, and artifact paths are in
+`autobench-solution/qwen3-vl-2b-fresh-final-1k-report.md`. This final set is now
+spent and must not be used for further tuning.
