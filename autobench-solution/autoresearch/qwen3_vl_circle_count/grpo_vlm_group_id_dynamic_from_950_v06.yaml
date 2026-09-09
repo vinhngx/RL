@@ -8,6 +8,10 @@ grpo:
   use_dynamic_sampling: true
   dynamic_sampling_max_gen_batches: 10
   batch_multiplier: 2
+  # Sampling needs the variance of the complete eight-rollout group. With a
+  # leave-one-out std, a 7-correct/1-wrong group drops its sole wrong rollout.
+  # The estimator below still uses leave-one-out for the actual advantages.
+  use_leave_one_out_baseline: false
   adv_estimator:
     name: grpo
     normalize_rewards: true

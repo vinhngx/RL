@@ -2,6 +2,7 @@ import torch
 
 from nemo_rl.algorithms.advantage_estimator import RLZVPAdvantageEstimator
 from nemo_rl.algorithms.grpo import _dataset_prompt_group_ids
+from nemo_rl.algorithms.utils import calculate_baseline_and_std_per_prompt
 from nemo_rl.distributed.batched_data_dict import BatchedDataDict
 
 
@@ -51,7 +52,23 @@ def test_vlm_group_identity_keeps_distinct_images_separate():
     assert torch.all(counts == 8)
 
 
+def test_dynamic_sampling_uses_full_group_variance():
+    """A 7/1 group must retain all eight rollouts during DAPO filtering."""
+    prompt_ids = torch.ones((8, 1), dtype=torch.long)
+    rewards = torch.tensor([1.0] * 7 + [0.0])
+    mask = torch.ones_like(rewards)
+    _, full_std = calculate_baseline_and_std_per_prompt(
+        prompt_ids, rewards, mask, leave_one_out_baseline=False
+    )
+    _, loo_std = calculate_baseline_and_std_per_prompt(
+        prompt_ids, rewards, mask, leave_one_out_baseline=True
+    )
+    assert torch.count_nonzero(full_std).item() == 8
+    assert torch.count_nonzero(loo_std).item() == 7
+
+
 if __name__ == "__main__":
     test_rl_zvp_mixed_and_zero_variance_groups()
     test_vlm_group_identity_keeps_distinct_images_separate()
+    test_dynamic_sampling_uses_full_group_variance()
     print("RL-ZVP advantage test passed")
