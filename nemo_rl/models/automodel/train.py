@@ -482,7 +482,7 @@ def automodel_forward_backward(
                     loss = result * dp_size * cp_size
                     loss.backward()
 
-        results.append((result, metrics))
+        results.append((result.detach(), metrics))
 
     return results
 
