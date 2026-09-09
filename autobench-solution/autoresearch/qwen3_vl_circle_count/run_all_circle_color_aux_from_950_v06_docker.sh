@@ -8,7 +8,8 @@ RUNTIME_REPO=/data/ephemeral/nemo-rl/ubuntu/reference-rl-v060-corrected
 BREV_ROOT=/data/ephemeral/nemo-rl/ubuntu
 CAMPAIGN=$BREV_ROOT/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98
 SOURCE=$CAMPAIGN/fresh-paired-counterfactual-from-950/data/train.jsonl
-ROOT=$CAMPAIGN/all-circle-color-aux-from-950
+DATA_ROOT=$CAMPAIGN/all-circle-color-aux-from-950
+ROOT=$CAMPAIGN/all-circle-color-aux-v2-from-950
 SCRIPT=$HOST_REPO/autobench-solution/autoresearch/qwen3_vl_circle_count
 DPO_PATCH=$SCRIPT/dpo_vlm_multimodal_v06.patch
 SIMPO_PATCH=$SCRIPT/simpo_preference_v06.patch
@@ -26,7 +27,7 @@ if [[ -f "$HOST_REPO/.env" ]]; then
   source "$HOST_REPO/.env"
   set +a
 fi
-mkdir -p "$ROOT"/{data,artifacts,logs,checkpoints,ray,tmp,wandb}
+mkdir -p "$DATA_ROOT"/{data,logs} "$ROOT"/{artifacts,logs,checkpoints,ray,tmp,wandb}
 
 DATASET_INIT=$RUNTIME_REPO/nemo_rl/data/datasets/preference_datasets/__init__.py
 if ! rg -q '"CircleCountPreferenceDataset":' "$DATASET_INIT"; then
@@ -53,12 +54,14 @@ if ! git -C "$AUTOMODEL_ROOT" apply --reverse --check "$CHECKPOINT_PATCH"; then
   git -C "$AUTOMODEL_ROOT" apply "$CHECKPOINT_PATCH"
 fi
 
-python3 "$SCRIPT/generate_counterfactual_vlm_preferences.py" \
-  --input "$SOURCE" \
-  --train-output "$ROOT/data/train.jsonl" \
-  --validation-output "$ROOT/data/validation.jsonl" \
-  --system-prompt-file "$SCRIPT/prompt_gym_boxed.txt" \
-  --validation-pairs-per-boundary 4 | tee "$ROOT/logs/generate.log"
+if [[ ! -s "$DATA_ROOT/data/train.jsonl" || ! -s "$DATA_ROOT/data/validation.jsonl" ]]; then
+  python3 "$SCRIPT/generate_counterfactual_vlm_preferences.py" \
+    --input "$SOURCE" \
+    --train-output "$DATA_ROOT/data/train.jsonl" \
+    --validation-output "$DATA_ROOT/data/validation.jsonl" \
+    --system-prompt-file "$SCRIPT/prompt_gym_boxed.txt" \
+    --validation-pairs-per-boundary 4 | tee "$DATA_ROOT/logs/generate.log"
+fi
 
 docker run --rm --name qwen3-vl-2b-all-circle-color-aux \
   --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
