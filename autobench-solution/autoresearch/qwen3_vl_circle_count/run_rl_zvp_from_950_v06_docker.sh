@@ -6,9 +6,12 @@ HOST_REPO=/home/ubuntu/RL
 RUNTIME_REPO=/data/ephemeral/nemo-rl/ubuntu/reference-rl-v060-corrected
 BREV_ROOT=/data/ephemeral/nemo-rl/ubuntu
 CAMPAIGN=$BREV_ROOT/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98
-ROOT=$CAMPAIGN/rl-zvp-from-950
+EXP_NAME=${EXP_NAME:-rl-zvp-from-950}
+CONFIG_FILE=${CONFIG_FILE:-grpo_rl_zvp_from_950_v06.yaml}
+CONTAINER_NAME=${CONTAINER_NAME:-qwen3-vl-2b-rl-zvp}
+ROOT=$CAMPAIGN/$EXP_NAME
 SCRIPT=$HOST_REPO/autobench-solution/autoresearch/qwen3_vl_circle_count
-CONFIG=/workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/grpo_rl_zvp_from_950_v06.yaml
+CONFIG=/workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/$CONFIG_FILE
 TRAIN_DATA=$CAMPAIGN/fresh-hard-negatives-from-950/data/candidate-pool.jsonl
 
 if [[ -f "$HOST_REPO/.env" ]]; then
@@ -20,6 +23,9 @@ fi
 [[ $(wc -l < "$TRAIN_DATA") -eq 3072 ]]
 if ! rg -q "class RLZVPAdvantageEstimator" "$RUNTIME_REPO/nemo_rl/algorithms/advantage_estimator.py"; then
   git -C "$RUNTIME_REPO" apply "$SCRIPT/rl_zvp_v06.patch"
+fi
+if [[ ${VLM_GROUP_IDENTITY:-0} == 1 ]] && ! rg -q "def _dataset_prompt_group_ids" "$RUNTIME_REPO/nemo_rl/algorithms/grpo.py"; then
+  git -C "$RUNTIME_REPO" apply "$SCRIPT/vlm_prompt_group_identity_v06.patch"
 fi
 mkdir -p "$ROOT"/{checkpoints,logs,ray,tmp,wandb}
 
@@ -33,7 +39,7 @@ PY=/opt/ray_venvs/nemo_rl.models.policy.workers.megatron_policy_worker.MegatronP
 PYTHONPATH=/opt/nemo-rl $PY /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/test_rl_zvp.py
 ' | tee "$ROOT/logs/preflight.log"
 
-docker run --rm --name qwen3-vl-2b-rl-zvp \
+docker run --rm --name "$CONTAINER_NAME" \
   --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
   -v "$BREV_ROOT:/brev" -v "$ROOT/ray:/ray" \
   -v "$RUNTIME_REPO:/opt/nemo-rl" -v "$HOST_REPO:/workspace/RL:ro" \

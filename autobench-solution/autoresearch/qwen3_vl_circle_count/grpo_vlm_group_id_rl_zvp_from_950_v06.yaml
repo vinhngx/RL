@@ -1,0 +1,11 @@
+# Faithful per-image RL-ZVP. NeMo-RL v0.6 otherwise groups VLM rollouts by
+# text-only prompt IDs, conflating distinct images that ask the same question.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/grpo_rl_zvp_from_950_v06.yaml
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/vlm-group-id-rl-zvp-from-950/checkpoints
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/vlm-group-id-rl-zvp-from-950/logs
+  wandb:
+    name: vlm-group-id-rl-zvp-from-950

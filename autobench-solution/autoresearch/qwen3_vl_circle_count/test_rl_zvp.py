@@ -1,6 +1,8 @@
 import torch
 
 from nemo_rl.algorithms.advantage_estimator import RLZVPAdvantageEstimator
+from nemo_rl.algorithms.grpo import _dataset_prompt_group_ids
+from nemo_rl.distributed.batched_data_dict import BatchedDataDict
 
 
 def test_rl_zvp_mixed_and_zero_variance_groups():
@@ -40,6 +42,16 @@ def test_rl_zvp_mixed_and_zero_variance_groups():
     torch.testing.assert_close(advantage[7], torch.tensor([-0.02, 0.0]))
 
 
+def test_vlm_group_identity_keeps_distinct_images_separate():
+    batch = BatchedDataDict({"idx": [index for index in range(16) for _ in range(8)]})
+    group_ids = _dataset_prompt_group_ids(batch, num_generations=8)
+    assert group_ids.shape == (128, 1)
+    unique, counts = torch.unique(group_ids, return_counts=True)
+    assert unique.numel() == 16
+    assert torch.all(counts == 8)
+
+
 if __name__ == "__main__":
     test_rl_zvp_mixed_and_zero_variance_groups()
+    test_vlm_group_identity_keeps_distinct_images_separate()
     print("RL-ZVP advantage test passed")

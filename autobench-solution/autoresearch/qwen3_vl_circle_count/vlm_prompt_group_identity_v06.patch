@@ -1,0 +1,82 @@
+diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
+--- a/nemo_rl/algorithms/grpo.py
++++ b/nemo_rl/algorithms/grpo.py
+@@ -1319,4 +1319,28 @@ def _create_advantage_estimator(master_config: MasterConfig):
+     return adv_estimator
+ 
+ 
++def _dataset_prompt_group_ids(
++    repeated_batch: BatchedDataDict[DatumSpec], num_generations: int
++) -> torch.Tensor:
++    """Identify VLM prompt groups by dataset example, including image identity.
++
++    Token-only prompt equality conflates different images that ask the same
++    textual question. ``idx`` is repeated by ``repeat_interleave`` and remains
++    attached through rollout and dynamic-sampling selection.
++    """
++    ids = torch.as_tensor(repeated_batch["idx"], dtype=torch.long)
++    _, counts = torch.unique(ids, return_counts=True)
++    if counts.numel() == 0 or not torch.all(counts == num_generations):
++        raise ValueError(
++            "Each VLM prompt idx must identify exactly "
++            f"{num_generations} contiguous rollouts; counts={counts.tolist()}"
++        )
++    print(
++        f"  ✓ VLM prompt identity: {counts.numel()} image groups x "
++        f"{num_generations} rollouts",
++        flush=True,
++    )
++    return ids.unsqueeze(-1)
++
++
+ def _extract_prompt_only_messages(message_logs: list) -> list:
+@@ -1852,21 +1876,25 @@ def grpo_train(
+                     rewards = repeated_batch["total_reward"]
+ 
+                     print("▶ Computing advantages...", flush=True)
++                    prompt_group_ids = _dataset_prompt_group_ids(
++                        repeated_batch,
++                        master_config["grpo"]["num_generations_per_prompt"],
++                    )
+                     if master_config["grpo"].get("calculate_advantages_on_gpu"):
+                         print("Computing advantages on GPU!")
+                         # Just fix the device id for now
+                         device_id = 0
+                         baseline, std = calculate_baseline_and_std_per_prompt(
+-                            input_ids.cuda(device_id),
++                            prompt_group_ids.cuda(device_id),
+                             rewards.cuda(device_id),
+                             torch.ones_like(rewards).cuda(device_id),
+                             leave_one_out_baseline=master_config["grpo"][
+                                 "use_leave_one_out_baseline"
+                             ],
+                         )
+                         baseline = baseline.cpu()
+                         std = std.cpu()
+                     else:
+                         baseline, std = calculate_baseline_and_std_per_prompt(
+-                            input_ids,
++                            prompt_group_ids,
+                             rewards,
+@@ -1912,17 +1941,11 @@ def grpo_train(
+                     # Save baseline for logging (before deletion)
+                     baseline_for_log = baseline.clone()
+ 
+-                    # Extract prompt-only messages for advantage estimation
+-                    prompt_only_message_logs = _extract_prompt_only_messages(
+-                        repeated_batch["message_log"]
+-                    )
+-                    prompt_batched_flat, _ = batched_message_log_to_flat_message(
+-                        prompt_only_message_logs,
+-                        pad_value_dict={"token_ids": tokenizer.pad_token_id},
++                    prompt_ids_for_adv = _dataset_prompt_group_ids(
++                        repeated_batch,
++                        master_config["grpo"]["num_generations_per_prompt"],
+                     )
+-                    prompt_ids_for_adv = prompt_batched_flat["token_ids"]
+-                    del prompt_only_message_logs
+-                    del prompt_batched_flat
++                    del prompt_group_ids
+                     del input_ids
+                     del baseline
+                     del std
