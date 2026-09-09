@@ -175,6 +175,21 @@ diff --git a/nemo_rl/models/automodel/train.py b/nemo_rl/models/automodel/train.
  class LogprobsPostProcessor:
      """Post-processor for computing log probabilities from model outputs."""
  
+diff --git a/nemo_rl/models/automodel/data.py b/nemo_rl/models/automodel/data.py
+--- a/nemo_rl/models/automodel/data.py
++++ b/nemo_rl/models/automodel/data.py
+@@ -364,7 +364,10 @@ def check_sequence_dim(data: BatchedDataDict[Any]) -> Tuple[int, int]:
+     """
+     sequence_dim = 1
+     seq_dim_size = data.get("input_ids").shape[sequence_dim]
+-    for _, v in data.items():
++    non_sequence_metadata = {"counterfactual_centers"}
++    for key, v in data.items():
++        if key in non_sequence_metadata:
++            continue
+         if torch.is_tensor(v) and len(v.shape) > 1:
+             assert v.shape[sequence_dim] == seq_dim_size, (
+                 f"Dim 1 must be the sequence dim, expected dim 1={seq_dim_size} but got shape {v.shape}"
 diff --git a/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py b/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
 --- a/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
 +++ b/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py

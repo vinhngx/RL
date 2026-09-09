@@ -7,6 +7,7 @@ import ast
 from pathlib import Path
 
 import torch
+from nemo_rl.models.automodel.data import check_sequence_dim
 
 
 def load_loss_function():
@@ -47,6 +48,13 @@ def compute(change_index: int):
 
 
 def main() -> None:
+    assert check_sequence_dim(
+        {
+            "input_ids": torch.zeros(4, 8),
+            "token_mask": torch.zeros(4, 8),
+            "counterfactual_centers": torch.zeros(4, 2),
+        }
+    ) == (1, 8)
     aligned_loss, aligned_metrics, _ = compute(0)
     wrong_loss, wrong_metrics, wrong_upper = compute(3)
     assert aligned_metrics["counterfactual_local_top1"] == 1.0
