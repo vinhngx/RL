@@ -39,13 +39,14 @@ fi
 if ! rg -q 'self\.preference_difference_only' "$LOSS_FILE"; then
   git -C "$RUNTIME_REPO" apply "$FOCUS_PATCH"
 fi
-if ! git -C "$RUNTIME_REPO" apply --reverse --check "$LOCAL_AUX_PATCH"; then
+TRAIN_FILE=$RUNTIME_REPO/nemo_rl/models/automodel/train.py
+if ! rg -q '^def counterfactual_localization_loss' "$TRAIN_FILE"; then
   if git -C "$RUNTIME_REPO" apply --reverse --check "$OLD_AUX_PATCH"; then
     git -C "$RUNTIME_REPO" apply --reverse "$OLD_AUX_PATCH"
   fi
   git -C "$RUNTIME_REPO" apply "$LOCAL_AUX_PATCH"
 fi
-if ! git -C "$RUNTIME_REPO" apply --reverse --check "$COLOR_AUX_PATCH"; then
+if ! rg -q '^def circle_color_alignment_loss' "$TRAIN_FILE"; then
   git -C "$RUNTIME_REPO" apply "$COLOR_AUX_PATCH"
 fi
 if ! git -C "$AUTOMODEL_ROOT" apply --reverse --check "$CHECKPOINT_PATCH"; then
