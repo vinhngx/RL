@@ -6,17 +6,22 @@ oapl:
   enabled: true
   beta1: 1.0
   beta2: 1e-3
-  sync_lag_interval: 50
+  sync_lag_interval: 10
 
 grpo:
   adv_estimator:
     name: "oapl"
-  num_prompts_per_step: 32
+  num_prompts_per_step: 64
+  num_generations_per_prompt: 16
   skip_reference_policy_logprobs_calculation: true
+  val_period: 25
+  val_batch_size: 32
+  val_at_end: true
+  val_at_start: true
 
 loss_fn:
   reference_policy_kl_penalty: 0.0
-  num_generations_per_prompt: 8
+  num_generations_per_prompt: 16
   normalize_rewards: false
   use_leave_one_out_baseline: false
   skip_reference_policy_logprobs_calculation: true
@@ -26,23 +31,26 @@ checkpointing:
 
 policy:
   model_name: "Qwen/Qwen3-1.7B"
-  train_global_batch_size: 256
+  train_global_batch_size: 1024
   dtensor_cfg:
+    activation_checkpointing: true
+    clear_cache_every_n_steps: 8
     lora_cfg:
       enabled: true
-  train_micro_batch_size: 2
-  logprob_batch_size: 4
+  train_micro_batch_size: 1
+  logprob_batch_size: 1
+  logprob_chunk_size: 2048
   dynamic_batching:
     enabled: true
   sequence_packing:
     enabled: false
-  max_total_sequence_length: 4096
+  max_total_sequence_length: 3072
   optimizer:
     kwargs:
-      lr: 1.0e-6
+      lr: 2.0e-5
       betas: [0.9, 0.95]
       weight_decay: 0.0
-  max_grad_norm: 1.0e-3
+  max_grad_norm: 1.0
   generation:
     max_new_tokens: 2048
     temperature: 1.0
@@ -51,8 +59,8 @@ policy:
 data:
   train:
     dataset_name: DAPOMath17K
-    split_validation_size: 0.01
-  validation: null
+  validation:
+    dataset_name: DAPOMathAIME2024
   default:
     prompt_file: "examples/prompts/cot.txt"
     processor: "math_hf_data_processor"
