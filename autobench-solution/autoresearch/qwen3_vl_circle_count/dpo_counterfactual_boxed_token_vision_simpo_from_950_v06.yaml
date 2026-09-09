@@ -1,0 +1,52 @@
+# Exact differing-answer-token SimPO on same-geometry counterfactual image
+# pairs. Only the vision tower is trainable, forcing correction into visual
+# representations while the decoder and box-format prior remain frozen.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/dpo_boxed_token_simpo_from_950_v06.yaml
+
+dpo:
+  max_num_steps: 16
+  val_period: 1
+  val_batches: 1
+  val_global_batch_size: 16
+  val_micro_batch_size: 1
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-boxed-token-vision-simpo-from-950/checkpoints
+  save_period: 1
+  keep_top_k: 16
+
+policy:
+  train_global_batch_size: 16
+  train_micro_batch_size: 1
+  dtensor_cfg:
+    activation_checkpointing: false
+    lora_cfg:
+      enabled: true
+      target_modules:
+        - "*visual*attn.qkv"
+        - "*visual*attn.proj"
+        - "*visual*linear_fc1"
+        - "*visual*linear_fc2"
+      exclude_modules: []
+      match_all_linear: false
+      dim: 8
+      alpha: 16
+      dropout: 0.0
+      dropout_position: post
+      lora_A_init: xavier
+      use_triton: true
+  optimizer:
+    kwargs:
+      lr: 2.5e-7
+
+data:
+  shuffle: true
+  train:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-boxed-token-vision-simpo-from-950/data/train.jsonl
+  validation:
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-boxed-token-vision-simpo-from-950/data/validation.jsonl
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/counterfactual-boxed-token-vision-simpo-from-950/logs
+  wandb:
+    name: counterfactual-boxed-token-vision-simpo-from-950
