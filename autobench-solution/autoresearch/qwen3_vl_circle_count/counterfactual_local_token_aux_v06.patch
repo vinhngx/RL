@@ -1,0 +1,233 @@
+diff --git a/nemo_rl/data/collate_fn.py b/nemo_rl/data/collate_fn.py
+--- a/nemo_rl/data/collate_fn.py
++++ b/nemo_rl/data/collate_fn.py
+@@ -149,6 +149,8 @@ def preference_collate_fn(
+     loss_multiplier = []
+     idx = []
+     task_names = []
++    has_counterfactual_centers = "counterfactual_center" in data_batch[0]
++    counterfactual_centers = []
+     for datum_spec in data_batch:
+         ## interleave chosen and rejected examples
+         message_log.append(datum_spec["message_log_chosen"])
+@@ -158,6 +160,9 @@ def preference_collate_fn(
+         loss_multiplier.extend([datum_spec["loss_multiplier"]] * 2)
+         idx.extend([datum_spec["idx"]] * 2)
+         task_names.extend([datum_spec.get("task_name", None)] * 2)
++        if has_counterfactual_centers:
++            center = datum_spec["counterfactual_center"]
++            counterfactual_centers.extend([center, center])
+     length_batch: torch.Tensor = torch.tensor(length)
+     loss_multiplier_batch: torch.Tensor = torch.tensor(loss_multiplier)
+ 
+@@ -187,6 +192,12 @@ def preference_collate_fn(
+         }
+     )
+     data.update(cat_and_padded.get_multimodal_dict(as_tensors=False))
++    if has_counterfactual_centers:
++        if len(counterfactual_centers) != len(message_log):
++            raise ValueError("counterfactual center metadata is incomplete")
++        data["counterfactual_centers"] = torch.tensor(
++            counterfactual_centers, dtype=torch.float32
++        )
+     if add_loss_mask:
+         data["token_mask"] = cat_and_padded["token_loss_mask"]
+ 
+diff --git a/nemo_rl/data/interfaces.py b/nemo_rl/data/interfaces.py
+--- a/nemo_rl/data/interfaces.py
++++ b/nemo_rl/data/interfaces.py
+@@ -50,6 +50,7 @@ class PreferenceDatumSpec(TypedDict):
+     length_rejected: int
+     loss_multiplier: float
+     idx: int
++    counterfactual_center: NotRequired[list[float]]
+ 
+ 
+ @dataclass
+diff --git a/nemo_rl/data/processors.py b/nemo_rl/data/processors.py
+--- a/nemo_rl/data/processors.py
++++ b/nemo_rl/data/processors.py
+@@ -312,6 +312,8 @@ def preference_preprocessor(
+         "loss_multiplier": loss_multiplier,
+         "idx": idx,
+     }
++    if "counterfactual_center" in datum_dict:
++        output["counterfactual_center"] = datum_dict["counterfactual_center"]
+     return output
+ 
+ 
+diff --git a/nemo_rl/models/automodel/train.py b/nemo_rl/models/automodel/train.py
+--- a/nemo_rl/models/automodel/train.py
++++ b/nemo_rl/models/automodel/train.py
+@@ -501,6 +501,8 @@ class LossPostProcessor:
+         dp_size: int,
+         enable_seq_packing: bool = False,
+         sampling_params: Optional[TrainingSamplingParams] = None,
++        counterfactual_local_state: Optional[dict[str, Any]] = None,
++        counterfactual_local_aux_config: Optional[dict[str, Any]] = None,
+     ):
+         """Initialize LossPostProcessor.
+ 
+@@ -524,6 +526,10 @@ class LossPostProcessor:
+         self.dp_size = dp_size
+         self.enable_seq_packing = enable_seq_packing
+         self.sampling_params = sampling_params
++        self.counterfactual_local_state = counterfactual_local_state
++        self.counterfactual_local_aux_config = (
++            counterfactual_local_aux_config or {}
++        )
+ 
+     def __call__(
+         self,
+@@ -585,9 +591,95 @@ class LossPostProcessor:
+                 **loss_input,
+             )
+ 
++        if self.counterfactual_local_aux_config.get("enabled"):
++            if self.counterfactual_local_state is None:
++                raise RuntimeError("counterfactual local state was not configured")
++            visual_tokens = self.counterfactual_local_state.pop("tokens", None)
++            grid_shapes = self.counterfactual_local_state.pop("grid_shapes", None)
++            if visual_tokens is None or grid_shapes is None:
++                raise RuntimeError("counterfactual local hook did not capture features")
++            aux_loss, aux_metrics = counterfactual_localization_loss(
++                visual_tokens=visual_tokens,
++                grid_shapes=grid_shapes,
++                centers=data_dict["counterfactual_centers"],
++                sample_mask=data_dict["sample_mask"],
++                global_valid_seqs=global_valid_seqs,
++                temperature=float(
++                    self.counterfactual_local_aux_config["temperature"]
++                ),
++                sigma=float(self.counterfactual_local_aux_config["sigma"]),
++            )
++            weight = float(self.counterfactual_local_aux_config["weight"])
++            loss = loss + weight * aux_loss
++            loss_metrics.update(aux_metrics)
++            loss_metrics["counterfactual_local_weighted_loss"] = (
++                weight * aux_loss
++            ).item()
++
+         return loss, loss_metrics
+ 
+ 
++def counterfactual_localization_loss(
++    *,
++    visual_tokens: list[torch.Tensor],
++    grid_shapes: list[tuple[int, int]],
++    centers: torch.Tensor,
++    sample_mask: torch.Tensor,
++    global_valid_seqs: torch.Tensor,
++    temperature: float,
++    sigma: float,
++) -> tuple[torch.Tensor, dict[str, float]]:
++    """Localize the sole changed circle using paired visual-token deltas."""
++    if len(visual_tokens) % 4 != 0:
++        raise ValueError("counterfactual local batches must contain groups of 4")
++    if len(grid_shapes) != len(visual_tokens) or centers.shape != (
++        len(visual_tokens),
++        2,
++    ):
++        raise ValueError("counterfactual local metadata shape mismatch")
++    if temperature <= 0 or sigma <= 0:
++        raise ValueError("temperature and sigma must be positive")
++    group_losses = []
++    group_hits = []
++    group_masks = []
++    for start in range(0, len(visual_tokens), 4):
++        shapes = grid_shapes[start : start + 4]
++        if any(shape != shapes[0] for shape in shapes[1:]):
++            raise ValueError("counterfactual visual grids differ within a pair")
++        pair_centers = centers[start : start + 4]
++        if not torch.allclose(pair_centers, pair_centers[:1].expand_as(pair_centers)):
++            raise ValueError("counterfactual centers differ within a pair")
++        lower = (visual_tokens[start] + visual_tokens[start + 1]) / 2
++        upper = (visual_tokens[start + 2] + visual_tokens[start + 3]) / 2
++        token_delta = upper.float() - lower.float()
++        height, width = shapes[0]
++        if token_delta.shape[0] != height * width:
++            raise ValueError("visual token count does not match its grid")
++        scores = token_delta.square().mean(-1) / temperature
++        y = torch.arange(height, device=scores.device, dtype=scores.dtype) + 0.5
++        x = torch.arange(width, device=scores.device, dtype=scores.dtype) + 0.5
++        yy, xx = torch.meshgrid(y, x, indexing="ij")
++        center_x = pair_centers[0, 0].to(scores.dtype) * width
++        center_y = pair_centers[0, 1].to(scores.dtype) * height
++        squared_distance = (xx - center_x).square() + (yy - center_y).square()
++        target = torch.softmax(
++            -squared_distance.flatten() / (2 * sigma * sigma), dim=0
++        )
++        group_losses.append(-(target * torch.log_softmax(scores, dim=0)).sum())
++        nearest = squared_distance.flatten().argmin()
++        group_hits.append((scores.argmax() == nearest).float())
++        group_masks.append(sample_mask[start : start + 4].min())
++    losses = torch.stack(group_losses)
++    hits = torch.stack(group_hits)
++    masks = torch.stack(group_masks)
++    global_groups = (global_valid_seqs / 4).clamp(min=1)
++    aux_loss = (losses * masks).sum() / global_groups
++    return aux_loss, {
++        "counterfactual_local_loss": aux_loss.item(),
++        "counterfactual_local_top1": ((hits * masks).sum() / global_groups).item(),
++    }
++
++
+ class LogprobsPostProcessor:
+     """Post-processor for computing log probabilities from model outputs."""
+ 
+diff --git a/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py b/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
+--- a/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
++++ b/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
+@@ -358,6 +358,33 @@ class DTensorPolicyWorkerV2Impl(AbstractPolicyWorker, ColocatablePolicyInterface
+             # Ensure model is in training mode
+             self.model.train()
+ 
++        local_aux_config = self.cfg["dtensor_cfg"].get(
++            "counterfactual_local_aux", {}
++        )
++        local_state = None
++        local_hook = None
++        if local_aux_config.get("enabled"):
++            local_state = {}
++            merge_size = int(local_aux_config["merge_size"])
++
++            def capture_counterfactual_local(_module, inputs, kwargs, output) -> None:
++                grid_thw = kwargs.get("grid_thw")
++                if grid_thw is None and len(inputs) > 1:
++                    grid_thw = inputs[1]
++                if grid_thw is None:
++                    raise RuntimeError("vision hook did not receive grid_thw")
++                shapes = [
++                    (int(grid[1]) // merge_size, int(grid[2]) // merge_size)
++                    for grid in grid_thw
++                ]
++                sizes = [height * width for height, width in shapes]
++                local_state["tokens"] = list(output.pooler_output.split(sizes))
++                local_state["grid_shapes"] = shapes
++
++            local_hook = self.model.model.visual.register_forward_hook(
++                capture_counterfactual_local, with_kwargs=True
++            )
++
+         # Create loss post-processor
+         loss_post_processor = LossPostProcessor(
+             loss_fn=loss_fn,
+@@ -369,6 +396,8 @@ class DTensorPolicyWorkerV2Impl(AbstractPolicyWorker, ColocatablePolicyInterface
+             dp_size=self.dp_size,
+             enable_seq_packing=self.enable_seq_packing,
+             sampling_params=self.sampling_params,
++            counterfactual_local_state=local_state,
++            counterfactual_local_aux_config=local_aux_config,
+         )
+ 
+         # Create train context factory
+@@ -487,6 +516,9 @@ class DTensorPolicyWorkerV2Impl(AbstractPolicyWorker, ColocatablePolicyInterface
+ 
+                 losses.append(torch.tensor(mb_losses).sum().item())
+ 
++            if local_hook is not None:
++                local_hook.remove()
++
+             # release gradient memory before rollouts
+             self.optimizer.zero_grad()
+             # increment scheduler after all batches in rollout are processed

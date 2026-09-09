@@ -62,10 +62,15 @@ def media_and_question(row: dict[str, Any]) -> tuple[str, str]:
 
 
 def preference(
-    row: dict[str, Any], chosen_count: int, rejected_count: int, system_prompt: str
+    row: dict[str, Any],
+    chosen_count: int,
+    rejected_count: int,
+    system_prompt: str,
+    counterfactual_center: tuple[float, float],
 ) -> dict[str, Any]:
     image, question = media_and_question(row)
     return {
+        "counterfactual_center": list(counterfactual_center),
         "context": [
             {"role": "system", "content": system_prompt},
             {
@@ -97,6 +102,39 @@ def preference(
             },
         ],
     }
+
+
+def changed_circle_center(
+    base: dict[str, Any], upper: dict[str, Any]
+) -> tuple[float, float]:
+    """Return the normalized center of the sole non-target -> target change."""
+    if len(base["circles"]) != len(upper["circles"]):
+        raise ValueError("counterfactual images have different circle counts")
+    changed = []
+    for lower_circle, upper_circle in zip(
+        base["circles"], upper["circles"], strict=True
+    ):
+        lower_geometry = (
+            lower_circle["x"],
+            lower_circle["y"],
+            lower_circle["radius"],
+        )
+        upper_geometry = (
+            upper_circle["x"],
+            upper_circle["y"],
+            upper_circle["radius"],
+        )
+        if lower_geometry != upper_geometry:
+            raise ValueError("counterfactual circle geometry changed")
+        if lower_circle["color"] != upper_circle["color"]:
+            changed.append((lower_circle, upper_circle))
+    if len(changed) != 1:
+        raise ValueError(f"expected one changed circle, found {len(changed)}")
+    lower_circle, upper_circle = changed[0]
+    if upper_circle["color"] != upper["target_color"]:
+        raise ValueError("changed circle did not become the target color")
+    image_size = 1000.0
+    return lower_circle["x"] / image_size, lower_circle["y"] / image_size
 
 
 def interleave_boundaries(
@@ -155,11 +193,24 @@ def main() -> None:
         for base, upper in interleave_boundaries(split_groups):
             lower_count = expected_count(base)
             upper_count = lower_count + 1
+            center = changed_circle_center(base, upper)
             outputs[split].append(
-                preference(base, lower_count, upper_count, system_prompt)
+                preference(
+                    base,
+                    lower_count,
+                    upper_count,
+                    system_prompt,
+                    center,
+                )
             )
             outputs[split].append(
-                preference(upper, upper_count, lower_count, system_prompt)
+                preference(
+                    upper,
+                    upper_count,
+                    lower_count,
+                    system_prompt,
+                    center,
+                )
             )
 
     for split, output_path in (
