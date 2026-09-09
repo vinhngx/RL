@@ -27,7 +27,8 @@ if [[ -f "$HOST_REPO/.env" ]]; then
 fi
 mkdir -p "$ROOT"/{data,artifacts,logs,checkpoints,ray,tmp,wandb}
 
-if ! git -C "$RUNTIME_REPO" apply --reverse --check "$DPO_PATCH"; then
+DATASET_INIT=$RUNTIME_REPO/nemo_rl/data/datasets/preference_datasets/__init__.py
+if ! rg -q '"CircleCountPreferenceDataset":' "$DATASET_INIT"; then
   git -C "$RUNTIME_REPO" apply "$DPO_PATCH"
 fi
 LOSS_FILE=$RUNTIME_REPO/nemo_rl/algorithms/loss/loss_functions.py
