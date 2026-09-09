@@ -67,6 +67,14 @@ def main() -> None:
     parser.add_argument("--pairs", type=int, default=4096)
     parser.add_argument("--min-target-count", type=int, default=4)
     parser.add_argument("--max-target-count", type=int, default=10)
+    parser.add_argument("--min-total-circles", type=int)
+    parser.add_argument("--max-total-circles", type=int, default=20)
+    parser.add_argument(
+        "--added-location",
+        choices=("random", "edge"),
+        default="random",
+        help="Choose the recolored circle randomly or nearest an image edge.",
+    )
     parser.add_argument("--seed-offset", type=int, default=4_600_000)
     args = parser.parse_args()
     if args.pairs <= 0:
@@ -75,6 +83,13 @@ def main() -> None:
         raise ValueError("--min-target-count must be non-negative")
     if args.max_target_count < args.min_target_count:
         raise ValueError("--max-target-count must be >= --min-target-count")
+    if args.max_total_circles <= args.max_target_count:
+        raise ValueError("--max-total-circles must exceed --max-target-count")
+    if (
+        args.min_total_circles is not None
+        and args.min_total_circles > args.max_total_circles
+    ):
+        raise ValueError("--min-total-circles must be <= --max-total-circles")
 
     generator = load_generator(args.generator)
     palette = tuple(generator.COLORS)
@@ -83,7 +98,8 @@ def main() -> None:
         seed = args.seed_offset + pair_id
         rng = random.Random(seed)
         base_count = rng.randint(args.min_target_count, args.max_target_count)
-        total = rng.randint(max(base_count + 2, 12), 20)
+        min_total = max(base_count + 2, args.min_total_circles or 12)
+        total = rng.randint(min_total, args.max_total_circles)
         source = generator.make_example(
             seed,
             img_size_range=(1000, 1000),
@@ -93,8 +109,28 @@ def main() -> None:
         target_color = palette[pair_id % len(palette)]
         distractors = [color for color in palette if color != target_color]
         distractor_palette = rng.sample(distractors, rng.randint(1, 3))
-        target_indices = set(rng.sample(range(total), base_count))
-        added_index = rng.choice([i for i in range(total) if i not in target_indices])
+        if args.added_location == "edge":
+            added_index = min(
+                range(total),
+                key=lambda index: min(
+                    source["circles"][index]["x"] - source["circles"][index]["radius"],
+                    source["circles"][index]["y"] - source["circles"][index]["radius"],
+                    1000
+                    - source["circles"][index]["x"]
+                    - source["circles"][index]["radius"],
+                    1000
+                    - source["circles"][index]["y"]
+                    - source["circles"][index]["radius"],
+                ),
+            )
+            target_indices = set(
+                rng.sample([i for i in range(total) if i != added_index], base_count)
+            )
+        else:
+            target_indices = set(rng.sample(range(total), base_count))
+            added_index = rng.choice(
+                [i for i in range(total) if i not in target_indices]
+            )
         base_colors = [
             target_color if i in target_indices else rng.choice(distractor_palette)
             for i in range(total)
@@ -102,28 +138,32 @@ def main() -> None:
         added_colors = base_colors.copy()
         added_colors[added_index] = target_color
 
-        rows.append(
-            render_variant(
-                generator,
-                source,
-                colors=base_colors,
-                target_color=target_color,
-                pair_id=pair_id,
-                variant="base",
-                expected_count=base_count,
-            )
+        base = render_variant(
+            generator,
+            source,
+            colors=base_colors,
+            target_color=target_color,
+            pair_id=pair_id,
+            variant="base",
+            expected_count=base_count,
         )
-        rows.append(
-            render_variant(
-                generator,
-                source,
-                colors=added_colors,
-                target_color=target_color,
-                pair_id=pair_id,
-                variant="plus_one",
-                expected_count=base_count + 1,
-            )
+        plus_one = render_variant(
+            generator,
+            source,
+            colors=added_colors,
+            target_color=target_color,
+            pair_id=pair_id,
+            variant="plus_one",
+            expected_count=base_count + 1,
         )
+        center = [
+            source["circles"][added_index]["x"] / 1000,
+            source["circles"][added_index]["y"] / 1000,
+        ]
+        for row in (base, plus_one):
+            row["counterfactual_center"] = center
+            row["counterfactual_location"] = args.added_location
+            rows.append(row)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w") as output:
