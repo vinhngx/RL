@@ -10,7 +10,7 @@ dpo:
   val_micro_batch_size: 2
 
 checkpointing:
-  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/all-circle-color-aux-v2-from-950/checkpoints
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/all-circle-color-aux-from-950/checkpoints
   save_period: 1
   keep_top_k: 8
 
@@ -23,7 +23,7 @@ policy:
       enabled: true
       merge_size: 2
       temperature: 0.05
-      weight: 0.005
+      weight: 0.01
       # red, blue, green, yellow, purple, orange, cyan, pink
       color_token_ids: [2518, 6303, 6176, 13753, 24932, 18575, 57888, 18217]
   optimizer:
@@ -38,6 +38,6 @@ data:
     data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/all-circle-color-aux-from-950/data/validation.jsonl
 
 logger:
-  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/all-circle-color-aux-v2-from-950/logs
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/all-circle-color-aux-from-950/logs
   wandb:
-    name: all-circle-color-aux-v2-from-950
+    name: all-circle-color-aux-from-950
