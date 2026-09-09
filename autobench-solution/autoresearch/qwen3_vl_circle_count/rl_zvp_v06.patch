@@ -1,0 +1,133 @@
+diff --git a/nemo_rl/algorithms/advantage_estimator.py b/nemo_rl/algorithms/advantage_estimator.py
+--- a/nemo_rl/algorithms/advantage_estimator.py
++++ b/nemo_rl/algorithms/advantage_estimator.py
+@@ -74,4 +74,68 @@ class GRPOAdvantageEstimator:
+         return advantages.expand(mask.shape)
+ 
+ 
++class RLZVPAdvantageEstimator:
++    """GRPO plus entropy-shaped credit for zero-variance prompt groups.
++
++    This follows Eq. 5 of Le et al., "No Prompt Left Behind" (ICLR 2026).
++    ``token_entropies`` may use a truncated top-k vocabulary distribution to
++    avoid materializing full-vocabulary logits on the driver.
++    """
++
++    def __init__(self, estimator_config: dict, loss_config: dict):
++        self.use_leave_one_out_baseline = estimator_config[
++            "use_leave_one_out_baseline"
++        ]
++        self.normalize_rewards = estimator_config["normalize_rewards"]
++        self.alpha = float(estimator_config.get("alpha", 0.1))
++        self.entropy_top_k = int(estimator_config.get("entropy_top_k", 64))
++        if self.alpha <= 0:
++            raise ValueError("RL-ZVP alpha must be positive")
++        if self.entropy_top_k <= 1:
++            raise ValueError("RL-ZVP entropy_top_k must exceed one")
++
++    def compute_advantage(
++        self, prompt_ids, rewards, mask, token_entropies=None, **kwargs
++    ):
++        if token_entropies is None:
++            raise ValueError("RL-ZVP requires token_entropies")
++        if token_entropies.shape != mask.shape:
++            raise ValueError(
++                "RL-ZVP token entropy shape must match the response mask"
++            )
++
++        baseline, std = calculate_baseline_and_std_per_prompt(
++            prompt_ids,
++            rewards,
++            torch.ones_like(rewards),
++            leave_one_out_baseline=self.use_leave_one_out_baseline,
++        )
++        response_advantages = (rewards - baseline).unsqueeze(-1)
++        if self.normalize_rewards:
++            non_zero_std = std > 0
++            response_advantages[non_zero_std] = response_advantages[non_zero_std] / (
++                std.unsqueeze(-1)[non_zero_std] + 1e-6
++            )
++        advantages = response_advantages.expand(mask.shape).clone()
++
++        zero_variance = std <= 0
++        if zero_variance.any():
++            entropies = token_entropies.to(
++                device=advantages.device, dtype=advantages.dtype
++            ).detach()
++            valid_entropies = entropies.masked_fill(~mask.bool(), float("-inf"))
++            max_entropy = valid_entropies.max(dim=-1).values
++            max_entropy = torch.where(
++                torch.isfinite(max_entropy), max_entropy, torch.zeros_like(max_entropy)
++            )
++            positive = zero_variance & (rewards > 0)
++            negative = zero_variance & ~positive
++            advantages[positive] = self.alpha * entropies[positive]
++            advantages[negative] = -self.alpha * (
++                max_entropy[negative].unsqueeze(-1) - entropies[negative]
++            )
++
++        return advantages * mask
++
++
+ class GDPOAdvantageEstimator:
+diff --git a/nemo_rl/algorithms/grpo.py b/nemo_rl/algorithms/grpo.py
+--- a/nemo_rl/algorithms/grpo.py
++++ b/nemo_rl/algorithms/grpo.py
+@@ -31,4 +31,5 @@ from nemo_rl.algorithms.advantage_estimator import (
+     GDPOAdvantageEstimator,
+     GRPOAdvantageEstimator,
++    RLZVPAdvantageEstimator,
+     ReinforcePlusPlusAdvantageEstimator,
+ )
+@@ -134,7 +135,10 @@ class AdvEstimatorConfig(TypedDict):
+     # Reinforce++ specific
+     minus_baseline: NotRequired[bool]
+     # GDPO-specific weights applied after per-component normalization.
+     reward_weights: NotRequired[list[float]]
++    # RL-ZVP entropy-shaped zero-variance advantages.
++    alpha: NotRequired[float]
++    entropy_top_k: NotRequired[int]
+ 
+ 
+ class CounterfactualPairRewardConfig(TypedDict):
+@@ -1302,4 +1306,7 @@ def _create_advantage_estimator(master_config: MasterConfig):
+     elif adv_estimator_name == "grpo":
+         adv_estimator = GRPOAdvantageEstimator(adv_estimator_config, loss_config)
+         print("  ✓ Using GRPO advantage estimator")
++    elif adv_estimator_name == "rl_zvp":
++        adv_estimator = RLZVPAdvantageEstimator(adv_estimator_config, loss_config)
++        print("  ✓ Using RL-ZVP advantage estimator")
+     elif adv_estimator_name == "reinforce_plus_plus":
+@@ -2031,4 +2038,26 @@ def grpo_train(
+                             )["reference_logprobs"]
+                         )
+ 
++                    token_entropies = None
++                    if isinstance(adv_estimator, RLZVPAdvantageEstimator):
++                        topk = policy.get_topk_logits(
++                            logprob_data,
++                            k=adv_estimator.entropy_top_k,
++                            timer=timer,
++                        )["topk_logits"].float()
++                        # Logits at position t predict token t+1, whereas NeMo's
++                        # token masks/logprobs align the prediction with token t+1.
++                        truncated_probs = torch.softmax(topk[:, :-1], dim=-1)
++                        entropy = -(
++                            truncated_probs
++                            * torch.log(truncated_probs.clamp_min(1e-12))
++                        ).sum(dim=-1)
++                        token_entropies = torch.zeros_like(
++                            train_data["prev_logprobs"], dtype=entropy.dtype
++                        )
++                        token_entropies[:, 1 : entropy.shape[1] + 1] = entropy
++                        del topk
++                        del truncated_probs
++                        del entropy
++
+                     del logprob_data
+@@ -2061,4 +2090,5 @@ def grpo_train(
+                         repeated_batch=repeated_batch,
+                         logprobs_policy=train_data["prev_logprobs"],
+                         logprobs_reference=train_data.get("reference_policy_logprobs"),
++                        token_entropies=token_entropies,
+                     )
