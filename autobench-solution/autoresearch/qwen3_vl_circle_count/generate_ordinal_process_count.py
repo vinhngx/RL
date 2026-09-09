@@ -33,7 +33,10 @@ def make_ordinal_example(row: dict) -> dict:
                 "six binary threshold checks in exactly this order: "
                 "GE5=, GE6=, GE7=, GE8=, GE9=, GE10=. Write 1 when the "
                 "count is at least that threshold and 0 otherwise. Then "
-                r"finish with the exact total in \boxed{} format."
+                r"finish with the exact total in \boxed{} format. For "
+                "example, if the total is 7, write exactly: GE5=1 GE6=1 "
+                r"GE7=1 GE8=0 GE9=0 GE10=0 \boxed{7}. Never leave a "
+                "threshold value blank."
             )
     output["process_ground_truth"] = json.dumps(expected, separators=(",", ":"))
     return output

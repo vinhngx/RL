@@ -11,7 +11,7 @@ grpo:
   seed: 590
 
 checkpointing:
-  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/ordinal-process-grpo-from-950/checkpoints
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/ordinal-process-grpo-v2-from-950/checkpoints
   save_period: 1
   keep_top_k: 8
 
@@ -27,7 +27,7 @@ policy:
 
 data:
   train:
-    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/ordinal-process-grpo-from-950/data/train.jsonl
+    data_path: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/ordinal-process-grpo-v2-from-950/data/train.jsonl
 
 env:
   circle-count:
@@ -37,6 +37,6 @@ env:
         weight: 1.0
 
 logger:
-  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/ordinal-process-grpo-from-950/logs
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/ordinal-process-grpo-v2-from-950/logs
   wandb:
-    name: ordinal-process-grpo-from-950
+    name: ordinal-process-grpo-v2-from-950

@@ -8,7 +8,7 @@ RUNTIME_REPO=/data/ephemeral/nemo-rl/ubuntu/reference-rl-v060-corrected
 BREV_ROOT=/data/ephemeral/nemo-rl/ubuntu
 CAMPAIGN=$BREV_ROOT/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98
 SOURCE=$CAMPAIGN/fresh-paired-counterfactual-from-950/data/train.jsonl
-ROOT=$CAMPAIGN/ordinal-process-grpo-from-950
+ROOT=$CAMPAIGN/ordinal-process-grpo-v2-from-950
 SCRIPT=$HOST_REPO/autobench-solution/autoresearch/qwen3_vl_circle_count
 CONFIG=/workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/grpo_ordinal_process_from_950_v06.yaml
 BASE_PATCH=$SCRIPT/quadrant_process_reward_v06.patch
@@ -34,7 +34,7 @@ mkdir -p "$ROOT"/{data,artifacts,logs,checkpoints,ray,tmp,wandb}
 python3 "$SCRIPT/generate_ordinal_process_count.py" \
   --input "$SOURCE" --output "$ROOT/data/train.jsonl" | tee "$ROOT/logs/generate.log"
 
-docker run --rm --name qwen3-vl-2b-ordinal-process-grpo \
+docker run --rm --name qwen3-vl-2b-ordinal-process-grpo-v2 \
   --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
   -v "$BREV_ROOT:/brev" -v "$ROOT/ray:/ray" \
   -v "$RUNTIME_REPO:/opt/nemo-rl" -v "$HOST_REPO:/workspace/RL:ro" \

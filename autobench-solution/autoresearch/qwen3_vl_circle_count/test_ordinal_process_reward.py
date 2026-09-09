@@ -41,7 +41,9 @@ def test_generator_builds_monotone_threshold_targets() -> None:
         "ge10": 0,
         "total": 7,
     }
-    assert "GE5=" in output["responses_create_params"]["input"][1]["content"][1]["text"]
+    prompt = output["responses_create_params"]["input"][1]["content"][1]["text"]
+    assert r"GE5=1 GE6=1 GE7=1 GE8=0 GE9=0 GE10=0 \boxed{7}" in prompt
+    assert "Never leave a threshold value blank" in prompt
 
 
 def test_reward_is_dense_and_requires_box_for_exactness() -> None:
