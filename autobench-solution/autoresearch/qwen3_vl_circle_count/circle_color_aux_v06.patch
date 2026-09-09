@@ -1,0 +1,256 @@
+diff --git a/nemo_rl/data/collate_fn.py b/nemo_rl/data/collate_fn.py
+--- a/nemo_rl/data/collate_fn.py
++++ b/nemo_rl/data/collate_fn.py
+@@ -151,6 +151,8 @@ def preference_collate_fn(
+     task_names = []
+     has_counterfactual_centers = "counterfactual_center" in data_batch[0]
+     counterfactual_centers = []
++    has_circle_annotations = "circle_annotations" in data_batch[0]
++    circle_annotations = []
+     for datum_spec in data_batch:
+         ## interleave chosen and rejected examples
+         message_log.append(datum_spec["message_log_chosen"])
+@@ -163,6 +165,9 @@ def preference_collate_fn(
+         if has_counterfactual_centers:
+             center = datum_spec["counterfactual_center"]
+             counterfactual_centers.extend([center, center])
++        if has_circle_annotations:
++            annotations = datum_spec["circle_annotations"]
++            circle_annotations.extend([annotations, annotations])
+     length_batch: torch.Tensor = torch.tensor(length)
+     loss_multiplier_batch: torch.Tensor = torch.tensor(loss_multiplier)
+ 
+@@ -204,6 +209,15 @@ def preference_collate_fn(
+         data["counterfactual_centers"] = torch.tensor(
+             counterfactual_centers, dtype=torch.float32
+         )
++    if has_circle_annotations:
++        max_circles = max(len(annotations) for annotations in circle_annotations)
++        padded_annotations = [
++            annotations + [[0.0, 0.0, -1.0]] * (max_circles - len(annotations))
++            for annotations in circle_annotations
++        ]
++        data["circle_annotations"] = torch.tensor(
++            padded_annotations, dtype=torch.float32
++        )
+     if add_loss_mask:
+         data["token_mask"] = cat_and_padded["token_loss_mask"]
+ 
+diff --git a/nemo_rl/data/interfaces.py b/nemo_rl/data/interfaces.py
+--- a/nemo_rl/data/interfaces.py
++++ b/nemo_rl/data/interfaces.py
+@@ -51,6 +51,7 @@ class PreferenceDatumSpec(TypedDict):
+     loss_multiplier: float
+     idx: int
+     counterfactual_center: NotRequired[list[float]]
++    circle_annotations: NotRequired[list[list[float]]]
+ 
+ 
+ @dataclass
+diff --git a/nemo_rl/data/processors.py b/nemo_rl/data/processors.py
+--- a/nemo_rl/data/processors.py
++++ b/nemo_rl/data/processors.py
+@@ -314,6 +314,8 @@ def preference_preprocessor(
+     }
+     if "counterfactual_center" in datum_dict:
+         output["counterfactual_center"] = datum_dict["counterfactual_center"]
++    if "circle_annotations" in datum_dict:
++        output["circle_annotations"] = datum_dict["circle_annotations"]
+     return output
+ 
+ 
+diff --git a/nemo_rl/models/automodel/data.py b/nemo_rl/models/automodel/data.py
+--- a/nemo_rl/models/automodel/data.py
++++ b/nemo_rl/models/automodel/data.py
+@@ -364,7 +364,7 @@ def check_sequence_dim(data: BatchedDataDict[Any]) -> Tuple[int, int]:
+     """
+     sequence_dim = 1
+     seq_dim_size = data.get("input_ids").shape[sequence_dim]
+-    non_sequence_metadata = {"counterfactual_centers"}
++    non_sequence_metadata = {"circle_annotations", "counterfactual_centers"}
+     for key, v in data.items():
+         if key in non_sequence_metadata:
+             continue
+diff --git a/nemo_rl/models/automodel/train.py b/nemo_rl/models/automodel/train.py
+--- a/nemo_rl/models/automodel/train.py
++++ b/nemo_rl/models/automodel/train.py
+@@ -503,6 +503,9 @@ class LossPostProcessor:
+         sampling_params: Optional[TrainingSamplingParams] = None,
+         counterfactual_local_state: Optional[dict[str, Any]] = None,
+         counterfactual_local_aux_config: Optional[dict[str, Any]] = None,
++        circle_color_state: Optional[dict[str, Any]] = None,
++        circle_color_vectors: Optional[torch.Tensor] = None,
++        circle_color_aux_config: Optional[dict[str, Any]] = None,
+     ):
+         """Initialize LossPostProcessor.
+ 
+@@ -530,6 +533,9 @@ class LossPostProcessor:
+         self.counterfactual_local_aux_config = (
+             counterfactual_local_aux_config or {}
+         )
++        self.circle_color_state = circle_color_state
++        self.circle_color_vectors = circle_color_vectors
++        self.circle_color_aux_config = circle_color_aux_config or {}
+ 
+     def __call__(
+         self,
+@@ -619,6 +625,31 @@ class LossPostProcessor:
+                 weight * aux_loss
+             ).item()
+ 
++        if self.circle_color_aux_config.get("enabled"):
++            if (
++                self.circle_color_state is None
++                or self.circle_color_vectors is None
++            ):
++                raise RuntimeError("circle color auxiliary was not configured")
++            visual_tokens = self.circle_color_state.pop("tokens", None)
++            grid_shapes = self.circle_color_state.pop("grid_shapes", None)
++            if visual_tokens is None or grid_shapes is None:
++                raise RuntimeError("circle color hook did not capture features")
++            color_loss, color_metrics = circle_color_alignment_loss(
++                visual_tokens=visual_tokens,
++                grid_shapes=grid_shapes,
++                annotations=data_dict["circle_annotations"],
++                sample_mask=data_dict["sample_mask"],
++                color_vectors=self.circle_color_vectors,
++                temperature=float(self.circle_color_aux_config["temperature"]),
++            )
++            weight = float(self.circle_color_aux_config["weight"])
++            loss = loss + weight * color_loss
++            loss_metrics.update(color_metrics)
++            loss_metrics["circle_color_weighted_loss"] = (
++                weight * color_loss
++            ).item()
++
+         return loss, loss_metrics
+ 
+ 
+@@ -690,6 +721,64 @@ def counterfactual_localization_loss(
+     }
+ 
+ 
++def circle_color_alignment_loss(
++    *,
++    visual_tokens: list[torch.Tensor],
++    grid_shapes: list[tuple[int, int]],
++    annotations: torch.Tensor,
++    sample_mask: torch.Tensor,
++    color_vectors: torch.Tensor,
++    temperature: float,
++) -> tuple[torch.Tensor, dict[str, float]]:
++    """Classify every known circle center against frozen color-word vectors."""
++    if len(visual_tokens) != len(grid_shapes) or annotations.shape[0] != len(
++        visual_tokens
++    ):
++        raise ValueError("circle color metadata shape mismatch")
++    if temperature <= 0:
++        raise ValueError("circle color temperature must be positive")
++    normalized_colors = torch.nn.functional.normalize(
++        color_vectors.float(), dim=-1
++    )
++    losses = []
++    correct = []
++    for sample_index, (tokens, (height, width)) in enumerate(
++        zip(visual_tokens, grid_shapes, strict=True)
++    ):
++        if tokens.shape[0] != height * width:
++            raise ValueError("visual token count does not match its grid")
++        if sample_mask[sample_index] <= 0:
++            continue
++        valid = annotations[sample_index, :, 2] >= 0
++        sample_annotations = annotations[sample_index, valid]
++        grid_x = (sample_annotations[:, 0] * width).long().clamp(max=width - 1)
++        grid_y = (sample_annotations[:, 1] * height).long().clamp(max=height - 1)
++        labels = sample_annotations[:, 2].long()
++        selected = tokens[grid_y * width + grid_x]
++        logits = (
++            torch.nn.functional.normalize(selected.float(), dim=-1)
++            @ normalized_colors.T
++        ) / temperature
++        losses.append(
++            torch.nn.functional.cross_entropy(logits, labels, reduction="sum")
++        )
++        correct.append((logits.argmax(-1) == labels).sum())
++    circle_count = sum(
++        int((annotations[index, :, 2] >= 0).sum())
++        for index in range(len(visual_tokens))
++        if sample_mask[index] > 0
++    )
++    if circle_count == 0:
++        raise ValueError("circle color batch contains no valid annotations")
++    color_loss = torch.stack(losses).sum() / circle_count
++    color_accuracy = torch.stack(correct).sum().float() / circle_count
++    return color_loss, {
++        "circle_color_loss": color_loss.item(),
++        "circle_color_accuracy": color_accuracy.item(),
++        "circle_color_count": float(circle_count),
++    }
++
++
+ class LogprobsPostProcessor:
+     """Post-processor for computing log probabilities from model outputs."""
+ 
+diff --git a/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py b/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
+--- a/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
++++ b/nemo_rl/models/policy/workers/dtensor_policy_worker_v2.py
+@@ -385,6 +385,40 @@ class DTensorPolicyWorkerV2Impl(AbstractPolicyWorker, ColocatablePolicyInterface
+                 capture_counterfactual_local, with_kwargs=True
+             )
+ 
++        color_aux_config = self.cfg["dtensor_cfg"].get("circle_color_aux", {})
++        color_state = None
++        color_vectors = None
++        color_hook = None
++        if color_aux_config.get("enabled"):
++            color_state = {}
++            merge_size = int(color_aux_config["merge_size"])
++
++            def capture_circle_colors(_module, inputs, kwargs, output) -> None:
++                grid_thw = kwargs.get("grid_thw")
++                if grid_thw is None and len(inputs) > 1:
++                    grid_thw = inputs[1]
++                if grid_thw is None:
++                    raise RuntimeError("vision hook did not receive grid_thw")
++                shapes = [
++                    (int(grid[1]) // merge_size, int(grid[2]) // merge_size)
++                    for grid in grid_thw
++                ]
++                color_state["tokens"] = list(
++                    output.pooler_output.split(
++                        [height * width for height, width in shapes]
++                    )
++                )
++                color_state["grid_shapes"] = shapes
++
++            color_hook = self.model.model.visual.register_forward_hook(
++                capture_circle_colors, with_kwargs=True
++            )
++            embedding_weight = self.model.get_input_embeddings().weight
++            color_token_ids = torch.tensor(
++                color_aux_config["color_token_ids"], device=embedding_weight.device
++            )
++            color_vectors = embedding_weight[color_token_ids].detach()
++
+         # Create loss post-processor
+         loss_post_processor = LossPostProcessor(
+             loss_fn=loss_fn,
+@@ -400,6 +434,9 @@ class DTensorPolicyWorkerV2Impl(AbstractPolicyWorker, ColocatablePolicyInterface
+             sampling_params=self.sampling_params,
+             counterfactual_local_state=local_state,
+             counterfactual_local_aux_config=local_aux_config,
++            circle_color_state=color_state,
++            circle_color_vectors=color_vectors,
++            circle_color_aux_config=color_aux_config,
+         )
+ 
+         # Create train context factory
+@@ -522,6 +559,8 @@ class DTensorPolicyWorkerV2Impl(AbstractPolicyWorker, ColocatablePolicyInterface
+ 
+             if local_hook is not None:
+                 local_hook.remove()
++            if color_hook is not None:
++                color_hook.remove()
+ 
+             # release gradient memory before rollouts
+             self.optimizer.zero_grad()

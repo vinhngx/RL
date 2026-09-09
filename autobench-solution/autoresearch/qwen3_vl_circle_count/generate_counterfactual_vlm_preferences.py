@@ -19,6 +19,9 @@ from pathlib import Path
 from typing import Any
 
 
+COLORS = ("red", "blue", "green", "yellow", "purple", "orange", "cyan", "pink")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
@@ -71,6 +74,14 @@ def preference(
     image, question = media_and_question(row)
     return {
         "counterfactual_center": list(counterfactual_center),
+        "circle_annotations": [
+            [
+                float(circle["x"]) / 1000,
+                float(circle["y"]) / 1000,
+                COLORS.index(circle["color"]),
+            ]
+            for circle in row["circles"]
+        ],
         "context": [
             {"role": "system", "content": system_prompt},
             {
