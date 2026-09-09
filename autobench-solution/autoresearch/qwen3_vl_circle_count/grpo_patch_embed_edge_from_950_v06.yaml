@@ -1,0 +1,60 @@
+# Exact GRPO on high-density edge counterfactuals from the robust 190/200
+# checkpoint. Update only the full-rank visual patch and learned positional
+# embeddings: these parameters are absent from every linear-LoRA experiment.
+defaults: /workspace/RL/autobench-solution/autoresearch/qwen3_vl_circle_count/grpo_edge_counterfactual_from_950_v06.yaml
+
+grpo:
+  max_num_steps: 1
+  val_period: 1
+  val_at_start: true
+  val_at_end: true
+
+loss_fn:
+  reference_policy_kl_penalty: 0.20
+
+checkpointing:
+  checkpoint_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/patch-embed-edge-grpo-from-950/checkpoints
+  save_period: 1
+  keep_top_k: 1
+  save_optimizer: false
+  save_consolidated: true
+
+policy:
+  train_global_batch_size: 128
+  train_micro_batch_size: 1
+  logprob_batch_size: 1
+  offload_optimizer_for_logprob: true
+  dynamic_batching:
+    enabled: true
+    train_mb_tokens: 1152
+    logprob_mb_tokens: 1152
+    sequence_length_round: 64
+  dtensor_cfg:
+    activation_checkpointing: true
+    trainable_param_patterns:
+      - "*visual.patch_embed*"
+      - "*visual.pos_embed*"
+    lora_cfg:
+      enabled: false
+      target_modules: []
+      exclude_modules: []
+      match_all_linear: false
+      dim: 8
+      alpha: 8
+      dropout: 0.0
+      dropout_position: post
+      lora_A_init: xavier
+      use_triton: false
+  optimizer:
+    kwargs:
+      lr: 1.0e-7
+      weight_decay: 0.0
+      betas: [0.9, 0.999]
+      eps: 1.0e-8
+      foreach: false
+      fused: false
+
+logger:
+  log_dir: /brev/nemo-rl-auto-research/20260907-qwen3-vl-2b-grpo-98/patch-embed-edge-grpo-from-950/logs
+  wandb:
+    name: patch-embed-edge-grpo-from-950
