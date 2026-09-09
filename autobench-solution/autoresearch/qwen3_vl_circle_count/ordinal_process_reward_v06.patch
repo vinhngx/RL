@@ -1,0 +1,57 @@
+diff --git a/nemo_rl/environments/rewards.py b/nemo_rl/environments/rewards.py
+--- a/nemo_rl/environments/rewards.py
++++ b/nemo_rl/environments/rewards.py
+@@ -75,1 +75,31 @@
++def ordinal_count_reward(
++    ground_truth: str, response: str
++) -> tuple[float, Optional[bool]]:
++    """Reward six monotone count thresholds and the strict boxed total."""
++    try:
++        expected = json.loads(ground_truth)
++    except (json.JSONDecodeError, TypeError):
++        return boxed_numeric_reward(ground_truth, response)
++    if not isinstance(expected, dict) or expected.get("kind") != "ordinal_count":
++        return boxed_numeric_reward(ground_truth, response)
++
++    predicted_thresholds = {
++        f"ge{threshold}": int(value)
++        for threshold, value in re.findall(
++            r"\bGE(5|6|7|8|9|10)\s*[:=]\s*([01])\b", response, re.IGNORECASE
++        )
++    }
++    threshold_names = tuple(f"ge{threshold}" for threshold in range(5, 11))
++    correct_thresholds = sum(
++        predicted_thresholds.get(name) == int(expected[name])
++        for name in threshold_names
++    )
++    box_match = re.search(r"\\boxed\{(\d+)\}", response)
++    predicted_total = int(box_match.group(1)) if box_match else None
++    total_is_correct = predicted_total == int(expected["total"])
++    thresholds_are_correct = correct_thresholds == len(threshold_names)
++    score = 0.5 * correct_thresholds / len(threshold_names) + 0.5 * total_is_correct
++    return score, total_is_correct and thresholds_are_correct
++
++
+ def object_location_reward(
+     ground_truth: str, response: str
+ ) -> tuple[float, Optional[bool]]:
+diff --git a/nemo_rl/environments/vlm_environment.py b/nemo_rl/environments/vlm_environment.py
+--- a/nemo_rl/environments/vlm_environment.py
++++ b/nemo_rl/environments/vlm_environment.py
+@@ -36,6 +36,7 @@ from nemo_rl.environments.rewards import (
+     exact_answer_alphanumeric_reward,
+     format_reward,
+     quadrant_process_reward,
++    ordinal_count_reward,
+     object_location_reward,
+     pixel_location_reward,
+     color_vector_reward,
+@@ -88,6 +89,8 @@ class VLMVerifyWorker:
+                 reward_func = boxed_numeric_proximity_reward
+             elif reward_func_name == "quadrant_process":
+                 reward_func = quadrant_process_reward
++            elif reward_func_name == "ordinal_count":
++                reward_func = ordinal_count_reward
+             elif reward_func_name == "object_location":
+                 reward_func = object_location_reward
+             elif reward_func_name == "pixel_location":
